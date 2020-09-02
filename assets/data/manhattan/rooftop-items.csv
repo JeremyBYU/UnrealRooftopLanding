@@ -1,0 +1,28 @@
+﻿Name,Notes,pictures,buildings,count
+any-ducts,sheet-metal air-ducts,download (1).jpg (https://dl.airtable.com/.attachments/016a586f4faac67b6f2f0d45485d13c8/c3c64a98),"344094,1255910,516923,711032,482686,405168,549548,546407",8
+multi-level,building has multiple levels. Quantity indicates how many levels. This does not include the top of a small building on top of a roof.,,"937428,399314,622247,122787,400163,516923,828206,496092,1189860,3475,151814,523914,549548,230772",14
+water-tower,water tower is on the surface of the roof,download (2).jpg (https://dl.airtable.com/.attachments/078b095f3a33c82fbda96b326517ae6a/efeeb05c),"117413,250483,330453,193082,1284,546407",6
+air-vents,small vents on top of the roof,"937428_rgb_unlabeled.jpg (https://dl.airtable.com/x0s666yQNWslpSvq9RQw_937428_rgb_unlabeled.jpg),D8D968.jpg (https://dl.airtable.com/.attachments/a78de4cfaeb67a3c8386519e0faeca5e/e2b6a05c)","937428,675199,338004,252956,117413,344094,828206,496092,1189860,716048,264986,155383,660323,749016,262670,711032,377485,383639,3266,414449,421243,347398,440717",23
+ac-unit,air conditioning unit,Instalation with Large AC units showing disconnect brackets-7.JPG (https://dl.airtable.com/.attachments/a69dc06cb2efff8911e6f2ca7931c15a/2baf7fbe),"287290,157037,319704,402190,622247,516923,749987,389711,496092,207395,482686,142908,440717",13
+small-building,a small building that sits on top of a flat roof. Often a structure to house maintenance equipment.,937428_rgb_unlabeled.jpg (https://dl.airtable.com/E9QZD1B3TpyZtxTUcueh_937428_rgb_unlabeled.jpg),"937428,157037,117413,546047,319704,402190,247942,344094,622247,1255910,683439,214400,1189860,716048,660323,785222,262670,735190,21038,3266,790316,523914,414449,421243,310087,330453,193082,1284,667160,546407",30
+small-rooftop-entrance,"Usually a small area used for roof top access.
+","download (3).jpg (https://dl.airtable.com/.attachments/aa0a861c8f515892dad85aba03db6529/11240e59),pennwell.web.400.300.jpg (https://dl.airtable.com/.attachments/b0900f1bd3f411abb6419d1442d81612/f84c9155)","675199,287290,338004,252956,546047,370363,702415,622832,225278,515356,848620,770975,709642,563319,88220,622247,1255910,122787,250483,828206,808483,749987,683439,214400,389711,496092,716048,354956,11550,57778,264986,10632,584313,207395,465078,537429,155383,667744,383741,660323,770518,749016,3475,370041,85332,372285,277663,262670,565112,551349,711032,482686,142908,151814,735190,405168,266954,762334,114274,75774,395000,680689,561723,377485,383639,673178,21038,3266,790316,285256,525655,153308,638139,446052,414449,421243,549548,439227,310087,440717,552617,834786,378364,461736,667160",85
+large-building,,,262670,1
+vegetatation,,,"344094,21038",2
+seating,,1cdadbbfde53b1edaf69fa79346e7d6b.jpg (https://dl.airtable.com/.attachments/8c5ea6a45732512076fa7afd92f8f914/514691c2),"1189860,523914,230772",3
+chimney,"Larger rectangular prism ejecting from roof. 
+",CNYD01_063.jpg (https://dl.airtable.com/.attachments/ea74043c52fae677a3ff7dcf404007a7/c8b28093),"287290,117413,262670,439227",4
+billboard,"A billboard
+",,"338004,711032",2
+skylight,"Glass skylight
+",download.jpg (https://dl.airtable.com/.attachments/84c02e2a110ff5bdedc9e4bab71404df/01ae673e),"546047,247942,122787,250483,516923,683439,716048,11550,57778,264986,584313,465078,667744,383741,785222,3475,370041,85332,262670,735190,405168,266954,114274,75774,395000,680689,561723,673178,3266,790316,525655,330453,834786,378364,1284,667160,546407,153308,638139,446052",40
+tarp,blue or green tarp,,"247942,400163",2
+construction,"signs of construction work
+",,193082,1
+enclosed-water-tower,water tower that is (semi)-enclosed by a building,water-tower-new-articleLarge.png (https://dl.airtable.com/.attachments/2ba0096a6a1073adec1ff5fbdb0d7811/e6a9dd61),"828206,1189860,310087,937428",4
+human-occupation,Area meant for human occupation,1cdadbbfde53b1edaf69fa79346e7d6b.jpg (https://dl.airtable.com/.attachments/e8fa55e07ded9e78997f9d6c6c982ebf/98a10433),"1189860,523914,230772",3
+empty,Nothing on roof,,"715227,552766,344373,394288,514337,716175,247507,828544",8
+pools,,,,0
+solar-panel,,,,0
+debris,"unknown debris
+",,,0

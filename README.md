@@ -1,16 +1,15 @@
 # Unreal Rooftop Landing
 
+This is the master repository to hold source code and analysis of Rooftop Landing in the Unreal Engine. This repository discusses the use of fusing Polylidar3D and Deep Learning to identify flat surfaces from 3D Point Clouds.
 
 ## Install
-
-### Python Instructions
 
 1. Install [conda](https://conda.io/projects/conda/en/latest/) or create a python virtual environment ([Why?](https://medium.freecodecamp.org/why-you-need-python-environments-and-how-to-manage-them-with-conda-85f155f4353c)). I recommend conda for Windows users.
 2. Example - `conda create --name unreal python=3.7 && conda activate unreal` 
 2. `pip install -e .`
 
 
-### Other Projects
+## Unreal Environment
 
 There are several projects/plugins used to **make** the actual unreal engine world environments. 
 
@@ -35,8 +34,8 @@ First we need to generate "Collection Points" for where the drone will be. To re
 Run `poi generate` for polygons and line data to create the Computer Vision Training Set
 
 
-1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_cv_training.npy -ns 2`
-2. `poi generate -m assets/maps/poi-line.geojson -o assets/collectionpoints/collection_points_cv_training.npy -nf 100 -yd 90 -pr 45 45 -pd 0 -rm 100 -ao`
+1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_cv_train.npy -ns 2`
+2. `poi generate -m assets/maps/poi-line.geojson -o assets/collectionpoints/collection_points_cv_train.npy -nf 100 -yd 90 -pr 45 45 -pd 0 -rm 100 -ao`
 
 Note that it doesn't overwrite the file, but will append to it (`-ao` flag).
 
@@ -53,27 +52,22 @@ This generated collection points for Rooftop LIDAR collection. Much smaller coll
 
 1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -rm 1000 -pr 75 75 -pd 0 -yd 90 -rfn class_label`
 
-### Generate Computer Vision Images
+### Generate Images from AirSim
 
-Use the following when collecting only scene and segmentation. Be sure to update your airsim settings in your home directory to use the computer vision mode.
+Next we will launch AirSim in Computer Vision mode and collect scene (rgb) and segmentation images. Data is saved inside the folder `AirSimCollectData`. We use a different program called `asc` (**A**ir**S**im**C**ollect) to perform this task. See `airsimcollect/README.md` for more details.  The drone will go to the position and orientation we specified from the previously generated collection points and capture images. Be sure to update your AirSim settings in your home directory to use the computer vision mode.
 
-`asc collect -c assets/rooftop/config_computervision_train.json`
+1. `asc collect -c assets/config/collect_cv_train.json`
+2. `asc collect -c assets/config/collect_cv_test.json`
 
-Use the following when collecting lidar. Be sure to update your airsim settings in your home directory to use the multirotor
+### Generate Images and LiDAR data from AirSim
 
-`asc collect -c assets/rooftop/config_lidar.json`
+Next we will launch AirSim in `Multirotor` mode. This time we will generate images and LiDAR point clouds from the collection points mentioned previously. Data is saved inside the folder `AirSimCollectData`. Be sure to update your AirSim settings in your home directory to use the multirotor.
+
+1. `asc collect -c assets/config/collect_lidar_landing.json`
 
 Notes - Sometimes the camera takes time to update position, add more time delay than 0.5 seconds. In other words the lidar and vehicle move to a new position but the camera is still in the old position (AirSim bug).
 
-Use the following when collecting only scene and segmentation for testing. Be sure to update your airsim settings in your home directory to use the computer vision mode.
-
-`asc collect -c assets/rooftop/config_computervision_test.json`
-
-## Visualize
-
-`python lidarsegmentation/airsimvis.py -pm -cm segmentation -c assets/rooftop/config.json`
-
-## LiDAR Sensor Settings
+LiDAR Sensor Settings:
 
 ```json
         "0": {
@@ -107,17 +101,10 @@ Use the following when collecting only scene and segmentation for testing. Be su
  
 
 
-### Dependencies
 
-* shapely (hard)
-* shapely-geojson (easy)
-* polylidar (easy)
-* descartes (easy)
-* polylabelfast (easy)
-* quaternion (maybe easy)
-* AirSim - We just need 2 types
+## Scratch
 
-## TODO
+### TODO
 
 * Collect more data (RGB, SEG) from 2 more worlds, 2000 Images each
   * 1 world randomly generated according to the distribution of Manhattan
@@ -145,11 +132,7 @@ Use the following when collecting only scene and segmentation for testing. Be su
   * Do a few 360 point clouds photos?
 
 
-### What would state_records look like?
-
-  Columns - command, environment, tag, uid, building, time, metric, misc
-
-#### Examples
+### Examples
   * predict_segmentation, laptop, N/A,  0, Building1, 20ms, IOU, N/A
   * classify_point_cloud, laptop, groundtruth, 0, Building1, 20ms, N/A, N/A
   * classify_point_cloud, laptop, predicted, 0, Building1, 20ms, N/A, N/A

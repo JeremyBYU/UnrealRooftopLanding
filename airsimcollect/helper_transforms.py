@@ -18,7 +18,7 @@ LOGGER = logging.getLogger('AirSimVis')
 
 BASE_DIR = path.dirname(path.dirname(path.dirname(__file__)))
 DATA_DIR = path.join(BASE_DIR, 'assets', 'data')
-SEG_RGB_FILE = path.join(DATA_DIR, 'seg_rgbs.txt')
+SEG_RGB_FILE = path.join(DATA_DIR, 'segmentation_colors.txt')
 TOLERANCE = 0.01
 
 

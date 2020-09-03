@@ -115,7 +115,7 @@ def import_world(json_fname):
 
 def plot_collection_points(points, center, radius):
     fig, ax = plt.subplots(
-        1, 1, subplot_kw={'projection': '3d', 'aspect': 'equal'})
+        1, 1, subplot_kw={'projection': '3d', 'aspect': 'auto'})
     # Plot points
     uvw = center - points[:, :3]
     ax.quiver(points[:, 0], points[:, 1],

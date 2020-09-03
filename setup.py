@@ -8,13 +8,13 @@ setup(
 
     # Project uses reStructuredText, so ensure that the docutils get
     # installed or upgraded on the target machine
-    install_requires=['Click', 'geojson', 'shapely>=1.5', 'airsim>=1.2.0', 'numpy>=1.15', 'colorama', 'Pillow', 'vispy', 'numpy-quaternion', 'matplotlib', 'open3d'],
+    install_requires=['Click', 'geojson', 'shapely>=1.5', 'airsim>=1.2.0', 'numpy>=1.15', 'colorama', 'Pillow', 'numpy-quaternion', 'matplotlib', 'numba'],
 
-    # entry_points='''
-    #     [console_scripts]
-    #     asc=airsimcollect.scripts.collect:cli
-    #     poi=airsimcollect.scripts.generatepoi:cli
-    # ''',
+    entry_points='''
+        [console_scripts]
+        asc=airsimcollect.scripts.collect:cli
+        poi=airsimcollect.scripts.generatepoi:cli
+    ''',
 
     package_data={
         # If any package contains *.txt or *.rst files, include them:

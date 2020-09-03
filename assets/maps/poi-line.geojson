@@ -1,0 +1,9 @@
+{
+"type": "FeatureCollection",
+"name": "poi-line",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:OGC:1.3:CRS84" } },
+"features": [
+{ "type": "Feature", "properties": { "height": 1520.0 }, "geometry": { "type": "LineString", "coordinates": [ [ -11134.523761836913764, 2349.69879312845751 ], [ 8679.27723044533559, 2509.745650901334557 ] ] } },
+{ "type": "Feature", "properties": { "height": 1520.0 }, "geometry": { "type": "LineString", "coordinates": [ [ -699.46863504529756, -6612.925242152694409 ], [ -571.431148826995923, 11120.266599082146058 ] ] } }
+]
+}

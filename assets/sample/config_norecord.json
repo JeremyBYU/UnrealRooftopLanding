@@ -1,0 +1,12 @@
+{
+  "name": "AirSimCollect",
+  "sim_mode": "ComputerVision",
+  "save_dir": "AirSimCollectData",
+  "segmentation_codes": [
+    ["Floor.*", 1],
+    [".*Building.*", 2],
+    ["Sky.*", 3]
+  ],
+  "collectors": [],
+  "collection_points": "assets/sample/collection_points.npy"
+}

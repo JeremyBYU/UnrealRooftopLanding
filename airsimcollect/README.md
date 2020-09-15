@@ -98,18 +98,19 @@ Default configuration file:
 ```json
 {
     "name": "AirSimCollect",
-    "sim_mode": "ComputerVision",
-    "save_dir": "AirSimCollectData",
-    "collector_file_prefix": "",
+    "sim_mode": "ComputerVision", // what mode are we in, doesn't doing anything now.
+    "save_dir": "AirSimCollectData", // where to save the data
     "ignore_collision": False ,
-    "segmentation_codes": [],
+    "segmentation_codes": [], // Very specific to your needs, see examples
     "collectors": [
         DEFAULT_SCENE,
         DEFAULT_SEGMENTATION
     ],
-    "collection_points": "",
-    "global_id_start": 0,
-    "collector_file_prefix": ""
+    "collection_points": "", // Numpy array path, NX6, x,y,z,roll,0,theta
+    "global_id_start": 0, // start at 0, or even 100 if you want
+    "collector_file_prefix": "", // Prefix each file with this string
+    "min_elapsed_time": 0.5, // minimum time needed to transfer between each collection point
+    "start_offset_unreal": [0, 0, 0] // AirSim origin is at player start. Put player start position here.
 }
 ```
 Default values for Scene and Segmentation collectors

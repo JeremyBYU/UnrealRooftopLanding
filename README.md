@@ -23,6 +23,8 @@ Note that items (1,2,4) are installed/used inside of the Unreal Project/Editor i
 
 ## Workflow
 
+Below is the workflow to generate training and testing data from the unreal environment.
+
 
 ### Generate Collection Points
 
@@ -33,11 +35,10 @@ First we need to generate "Collection Points" for where the drone will be. To re
 
 Run `poi generate` for polygons and line data to create the Computer Vision Training Set
 
-
 1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_cv_train.npy -ns 2`
 2. `poi generate -m assets/maps/poi-line.geojson -o assets/collectionpoints/collection_points_cv_train.npy -nf 100 -yd 90 -pr 45 45 -pd 0 -rm 100 -ao`
 
-Note that it doesn't overwrite the file, but will append to it (`-ao` flag).
+Note that (2) doesn't overwrite the file, but will append to it (`-ao` flag).
 
 #### Computer Vision Testing Collection Points
 
@@ -48,7 +49,7 @@ Note that it doesn't overwrite the file, but will append to it (`-ao` flag).
 
 #### Rooftop Landing Collection Points
 
-This generated collection points for Rooftop LIDAR collection. Much smaller collection. Used for testing actual landing. 
+This generated collection points for Rooftop LIDAR collection. Much smaller collection. Used for testing actual landing site selection. 
 
 1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -rm 1000 -pr 75 75 -pd 0 -yd 90 -rfn class_label`
 
@@ -92,6 +93,7 @@ LiDAR Sensor Settings:
 ```
 
 ## Gather Data Script
+
 `python assets/rooftop/scripts/gatherstats.py -c assets/rooftop/scripts/config_gather_stats.json`
 
 `python assets/rooftop/scripts/gatherstats.py -c assets/rooftop/scripts/config_gather_stats_tx2.json`

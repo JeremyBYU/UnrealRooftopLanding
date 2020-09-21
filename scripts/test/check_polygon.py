@@ -7,14 +7,19 @@ import numpy as np
 import airsim
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
+import yaml
 
 from airsimcollect.helper_transforms import parse_lidarData
 from airsimcollect.o3d_util import get_extrinsics, set_view
+from airsimcollect.helper_mesh import create_meshes_cuda, update_open_3d_mesh_from_tri_mesh
+from airsimcollect.helper_polylidar import extract_all_dominant_plane_normals
 
 from organizedpointfilters.utility.helper import (laplacian_opc, laplacian_then_bilateral_opc_cuda,
                                                   create_mesh_from_organized_point_cloud_with_o3d)
 
-from polylidar import MatrixDouble, extract_tri_mesh_from_organized_point_cloud, HalfEdgeTriangulation
+from fastga import GaussianAccumulatorS2, IcoCharts
+
+from polylidar import MatrixDouble, extract_tri_mesh_from_organized_point_cloud, HalfEdgeTriangulation, Polylidar3D
 
 
 COLOR_PALETTE = list(
@@ -22,13 +27,6 @@ COLOR_PALETTE = list(
 
 # Lidar Point Cloud Image
 lidar_beams = 64
-
-
-def pick_valid_normals(opc_normals):
-    # I think that we need this with open3d 0.10.0
-    mask = ~np.isnan(opc_normals).any(axis=1)
-    tri_norms = np.ascontiguousarray(opc_normals[mask, :])
-    return tri_norms
 
 
 def set_up_aisim():
@@ -74,43 +72,20 @@ def translate_meshes(meshes, x_amt=0, y_amt=20):
         x_amt_ += x_amt
         y_amt_ += y_amt
 
-def update_mesh(mesh, opc, opc_normals=None):
-    opc_new = opc.astype('f8')
-    opc_ = opc_new
-    if opc_.ndim == 3:
-        rows = opc_new.shape[0]
-        cols = opc_new.shape[1]
-        stride = 1
-        opc_ = opc_new.reshape((rows * cols, 3))
-
-    pcd_mat = MatrixDouble(opc_)
-    tri_mesh, tri_map = extract_tri_mesh_from_organized_point_cloud(
-        pcd_mat, rows, cols, stride)
-
-    # Have to filter out nan vertices and normals
-    mask = np.isnan(opc_).any(axis=1)
-    opc_[mask, :] = [0, 0, 0]
-
-    # Update the mesh
-    mesh.triangles = o3d.utility.Vector3iVector(
-        np.array(tri_mesh.triangles, dtype=int))
-    mesh.vertices = o3d.utility.Vector3dVector(opc_)
-    mesh.paint_uniform_color(COLOR_PALETTE[0])
-    mesh.compute_vertex_normals()
-
-    if opc_normals is not None:
-        opc_normals = pick_valid_normals(opc_normals)
-        mesh.triangle_normals = o3d.utility.Vector3dVector(opc_normals)
-    else:
-        mesh.compute_triangle_normals()
-        mesh.compute_vertex_normals()
 
 def main():
+
+    # Load yaml file
+    with open('./assets/config/PolylidarParams.yaml') as file:
+        try:
+            config = yaml.safe_load(file)
+        except yaml.YAMLError as exc:
+            print("Error parsing yaml")
+
     client = set_up_aisim()
     o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Debug)
 
     pcd = o3d.geometry.PointCloud()
-    # pcd_smooth = o3d.geometry.PointCloud()
     mesh_noisy = o3d.geometry.TriangleMesh()
     mesh_smooth = o3d.geometry.TriangleMesh()
     axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
@@ -118,33 +93,40 @@ def main():
     vis = o3d.visualization.Visualizer()
     vis.create_window()
     vis.add_geometry(pcd)
-    vis.add_geometry(mesh_noisy)
     vis.add_geometry(mesh_smooth)
     vis.add_geometry(axis)
+
+    pl = Polylidar3D(**config['polylidar'])
+    ga = GaussianAccumulatorS2(level=config['fastga']['level'])
+    ico = IcoCharts(level=config['fastga']['level'])
 
     prev_time = time.time()
     while True:
         if time.time() - prev_time > 0.5:
             points = get_lidar_data(client)
             print(f"Full Point Cloud Size (including NaNs): {points.shape}")
-
+            if np.count_nonzero(~np.isnan(points)) < 300:
+                continue
             # get columns of organized point cloud
             num_cols = int(points.shape[0] / lidar_beams)
             opc = points.reshape((lidar_beams, num_cols, 3))
-            # smooth organized pont cloud
-            opc_smooth, opc_normals = laplacian_then_bilateral_opc_cuda(
-                opc, loops_laplacian=1, _lambda=0.5, loops_bilateral=4, sigma_angle=0.2, sigma_length=0.3)
-            opc_smooth = opc_smooth.reshape((lidar_beams, num_cols, 3))
 
+            # 1. Create mesh
+            tri_mesh, alg_timings = create_meshes_cuda(
+                opc, **config['mesh']['filter'])
+
+            # 2. Get dominant plane normals
+            avg_peaks, _, _, _, timings = extract_all_dominant_plane_normals(
+                tri_mesh, ga_=ga, ico_chart_=ico, **config['fastga'])
+            alg_timings.update(timings)
+
+            # print(alg_timings)
             # update the open3d geometries
             update_point_cloud(pcd, points)
-            update_mesh(mesh_noisy, opc)
-            update_mesh(mesh_smooth, opc_smooth, opc_normals)
-            translate_meshes([pcd, mesh_noisy, mesh_smooth])
+            update_open_3d_mesh_from_tri_mesh(mesh_smooth, tri_mesh)
+            translate_meshes([pcd, mesh_smooth])
 
         vis.update_geometry(pcd)
-        # vis.update_geometry(pcd_smooth)
-        vis.update_geometry(mesh_noisy)
         vis.update_geometry(mesh_smooth)
         vis.poll_events()
         update_view(vis)

@@ -8,7 +8,7 @@ setup(
 
     # Project uses reStructuredText, so ensure that the docutils get
     # installed or upgraded on the target machine
-    install_requires=['Click', 'geojson', 'shapely>=1.5', 'airsim>=1.2.0', 'numpy>=1.15', 'colorama', 'Pillow', 'numpy-quaternion', 'matplotlib', 'numba'],
+    install_requires=['Click', 'geojson', 'shapely>=1.5', 'airsim>=1.2.0', 'numpy>=1.15', 'colorama', 'Pillow', 'numpy-quaternion', 'matplotlib', 'numba', 'pyyaml'],
 
     entry_points='''
         [console_scripts]

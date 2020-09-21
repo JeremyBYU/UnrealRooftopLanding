@@ -5,7 +5,7 @@ import open3d as o3d
 import numpy as np
 import airsim
 
-from airsimcollect.helper_transforms import parse_lidarData
+from airsimcollect.helper.helper_transforms import parse_lidarData
 from airsimcollect.o3d_util import get_extrinsics, set_view
 
 def set_up_aisim():

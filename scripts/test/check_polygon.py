@@ -9,10 +9,10 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 import yaml
 
-from airsimcollect.helper_transforms import parse_lidarData
-from airsimcollect.o3d_util import get_extrinsics, set_view
-from airsimcollect.helper_mesh import create_meshes_cuda, update_open_3d_mesh_from_tri_mesh
-from airsimcollect.helper_polylidar import extract_all_dominant_plane_normals
+from airsimcollect.helper.helper_transforms import parse_lidarData
+from airsimcollect.helper.o3d_util import get_extrinsics, set_view, handle_shapes
+from airsimcollect.helper.helper_mesh import create_meshes_cuda, update_open_3d_mesh_from_tri_mesh
+from airsimcollect.helper.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 
 from organizedpointfilters.utility.helper import (laplacian_opc, laplacian_then_bilateral_opc_cuda,
                                                   create_mesh_from_organized_point_cloud_with_o3d)
@@ -27,6 +27,7 @@ COLOR_PALETTE = list(
 
 # Lidar Point Cloud Image
 lidar_beams = 64
+
 
 
 def set_up_aisim():
@@ -95,42 +96,50 @@ def main():
     vis.add_geometry(pcd)
     vis.add_geometry(mesh_smooth)
     vis.add_geometry(axis)
+    all_polys = []
 
     pl = Polylidar3D(**config['polylidar'])
     ga = GaussianAccumulatorS2(level=config['fastga']['level'])
     ico = IcoCharts(level=config['fastga']['level'])
 
     prev_time = time.time()
-    while True:
-        if time.time() - prev_time > 0.5:
-            points = get_lidar_data(client)
-            print(f"Full Point Cloud Size (including NaNs): {points.shape}")
-            if np.count_nonzero(~np.isnan(points)) < 300:
-                continue
-            # get columns of organized point cloud
-            num_cols = int(points.shape[0] / lidar_beams)
-            opc = points.reshape((lidar_beams, num_cols, 3))
+    with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Info):
+        while True:
+            if time.time() - prev_time > 0.1:
+                points = get_lidar_data(client)
+                print(f"Full Point Cloud Size (including NaNs): {points.shape}")
+                if np.count_nonzero(~np.isnan(points)) < 300:
+                    continue
+                # get columns of organized point cloud
+                num_cols = int(points.shape[0] / lidar_beams)
+                opc = points.reshape((lidar_beams, num_cols, 3))
+                # 1. Create mesh
+                tri_mesh, alg_timings = create_meshes_cuda(
+                    opc, **config['mesh']['filter'])
+                # 2. Get dominant plane normals
+                avg_peaks, _, _, _, timings = extract_all_dominant_plane_normals(
+                    tri_mesh, ga_=ga, ico_chart_=ico, **config['fastga'])
+                alg_timings.update(timings)
+                # 3. Extract Planes and Polygons
+                planes, obstacles, timings = extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks, pl_=pl,
+                                                                                filter_polygons=True, optimized=True,
+                                                                                postprocess=config['polygon']['postprocess'])
+                alg_timings.update(timings)
 
-            # 1. Create mesh
-            tri_mesh, alg_timings = create_meshes_cuda(
-                opc, **config['mesh']['filter'])
+                all_polys = handle_shapes(vis, planes, obstacles, all_polys)
+                # print(planes)
+                # print(alg_timings)
+                # update the open3d geometries
+                update_point_cloud(pcd, points)
+                update_open_3d_mesh_from_tri_mesh(mesh_smooth, tri_mesh)
+                translate_meshes([mesh_smooth, pcd])
+                prev_time = time.time()
 
-            # 2. Get dominant plane normals
-            avg_peaks, _, _, _, timings = extract_all_dominant_plane_normals(
-                tri_mesh, ga_=ga, ico_chart_=ico, **config['fastga'])
-            alg_timings.update(timings)
-
-            # print(alg_timings)
-            # update the open3d geometries
-            update_point_cloud(pcd, points)
-            update_open_3d_mesh_from_tri_mesh(mesh_smooth, tri_mesh)
-            translate_meshes([pcd, mesh_smooth])
-
-        vis.update_geometry(pcd)
-        vis.update_geometry(mesh_smooth)
-        vis.poll_events()
-        update_view(vis)
-        vis.update_renderer()
+            vis.update_geometry(pcd)
+            vis.update_geometry(mesh_smooth)
+            vis.poll_events()
+            update_view(vis)
+            vis.update_renderer()
     vis.destroy_window()
 
 

@@ -3,18 +3,18 @@ mesh:
   stride: 1       # skip rows/columns
   filter:
     loops_laplacian: 1 # how many iterations
-    _lambda: 0.5 # weight factor for laplacian update
+    _lambda: 0.75 # weight factor for laplacian update
     kernel_size: 3 # only changes for laplacian
     loops_bilateral: 4 # how many iterations
     sigma_length: 0.3 # std of distance between triangles centroids
     sigma_angle: 0.2 # std of distance between triangles normals
 polylidar: # Parameters we send to polylidar. Determine plane and polygon extraction from point clouds.
   alpha: 0.0 # must be set to 0.0 if using lmax
-  lmax: 0.3 # maximum distance between points in plane for spatial connection
+  lmax: 1.0 # maximum distance between points in plane for spatial connection
   z_thresh: 0.1 # enforce point to plane distance constraints during region growing.
   norm_thresh: 0.96 # Not used, set to the same as norm_thresh_min. Will deprecate later.
   norm_thresh_min: 0.96 # triangles must have a minimum amount of planarity.
-  min_hole_vertices : 10 # minimum number of vertices in a hole to return
+  min_hole_vertices : 4 # minimum number of vertices in a hole to return
   min_triangles: 100 # minimum number of triangles needed to make a plane
 fastga: # Parameters used for dominant plane normal estimation
   level: 4 # refinement level of the gaussian accumulator
@@ -29,3 +29,17 @@ fastga: # Parameters used for dominant plane normal estimation
     criterion: 'distance'
   average_filter: # A merge group must have at least x% of value in all of histogram, this doesn't have much meaning and will probably be deprecated
     min_total_weight: 0.1
+polygon:
+  postprocess: # post processing of polygons returned from polylidar for ground/obstacle identification
+    filter: # obstacles must have these characteristics
+      hole_area:
+        min: 0.10   # m^2
+        max: 20.0 # m^2
+      hole_vertices:
+        min: 4
+      plane_area:
+        min: .10 # m^2
+    # These parameters correspond to Shapely polygon geometry operations
+    positive_buffer: 0.1 # m, Positively expand polygon.  Fills in small holes
+    negative_buffer: 0.2 # m, Negative buffer to polygon. Expands holes and constricts outer hull of polygon
+    simplify: 0.3  # m, simplify edges of polygon

@@ -141,7 +141,6 @@ def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
     else:
         all_planes, all_polygons = pl.extract_planes_and_polygons(tri_mesh, avg_peaks_mat)
     t1 = time.perf_counter()
-
     # tri_set = pl.extract_tri_set(tri_mesh, avg_peaks_mat)
     # planes_tri_set = [np.argwhere(np.asarray(tri_set) == i)  for i in range(1, 2)]
     # o3d_mesh_painted = paint_planes(o3d_mesh, planes_tri_set)

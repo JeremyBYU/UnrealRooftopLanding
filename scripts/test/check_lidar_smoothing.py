@@ -8,8 +8,8 @@ import airsim
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 
-from airsimcollect.helper_transforms import parse_lidarData
-from airsimcollect.o3d_util import get_extrinsics, set_view
+from airsimcollect.helper.helper_transforms import parse_lidarData
+from airsimcollect.helper.o3d_util import get_extrinsics, set_view
 
 from organizedpointfilters.utility.helper import (laplacian_opc, laplacian_then_bilateral_opc_cuda,
                                                   create_mesh_from_organized_point_cloud_with_o3d)
@@ -29,7 +29,6 @@ def pick_valid_normals(opc_normals):
     mask = ~np.isnan(opc_normals).any(axis=1)
     tri_norms = np.ascontiguousarray(opc_normals[mask, :])
     return tri_norms
-
 
 def set_up_aisim():
     # connect to the AirSim simulator
@@ -124,14 +123,14 @@ def main():
 
     prev_time = time.time()
     while True:
-        if time.time() - prev_time > 0.5:
+        if time.time() - prev_time > 0.05:
             points = get_lidar_data(client)
             print(f"Full Point Cloud Size (including NaNs): {points.shape}")
 
             # get columns of organized point cloud
             num_cols = int(points.shape[0] / lidar_beams)
             opc = points.reshape((lidar_beams, num_cols, 3))
-            # smooth organized pont cloud
+            # smooth organized point cloud
             opc_smooth, opc_normals = laplacian_then_bilateral_opc_cuda(
                 opc, loops_laplacian=1, _lambda=0.5, loops_bilateral=4, sigma_angle=0.2, sigma_length=0.3)
             opc_smooth = opc_smooth.reshape((lidar_beams, num_cols, 3))
@@ -141,9 +140,9 @@ def main():
             update_mesh(mesh_noisy, opc)
             update_mesh(mesh_smooth, opc_smooth, opc_normals)
             translate_meshes([pcd, mesh_noisy, mesh_smooth])
+            prev_time = time.time()
 
         vis.update_geometry(pcd)
-        # vis.update_geometry(pcd_smooth)
         vis.update_geometry(mesh_noisy)
         vis.update_geometry(mesh_smooth)
         vis.poll_events()

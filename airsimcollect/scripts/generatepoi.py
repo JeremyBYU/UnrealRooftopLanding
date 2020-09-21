@@ -12,7 +12,7 @@ from shapely.geometry import Point
 import click
 click.option = partial(click.option, show_default=True)
 
-from airsimcollect.helper import import_world, plot_collection_points
+from airsimcollect.helper.helper import import_world, plot_collection_points
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger("GeneratePoi")
 logger.setLevel(logging.INFO)

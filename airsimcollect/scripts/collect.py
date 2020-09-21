@@ -11,7 +11,7 @@ from pprint import pprint
 import click
 import numpy as np
 
-from airsimcollect.helper import update, update_collectors, DEFAULT_CONFIG
+from airsimcollect.helper.helper import update, update_collectors, DEFAULT_CONFIG
 from airsimcollect import AirSimCollect
 
 logger = logging.getLogger("AirSimCapture")

@@ -2,6 +2,8 @@
 
 """
 import logging
+from os import path
+import json
 
 logger = logging.getLogger("AirSimCapture")
 logger.setLevel(logging.DEBUG)
@@ -11,6 +13,15 @@ logger.setLevel(logging.DEBUG)
 # print("Done: %r" % (found))
 
 REGEX_CATCH_ALL = "[\w*. ]*"
+
+BASE_DIR = path.dirname(path.dirname(__file__))
+DATA_DIR = path.join(BASE_DIR, 'assets', 'data')
+REGEXCODES_FILE = path.join(DATA_DIR, 'segmentation_codes.json')
+DEFAULT_REGEX_CODES = []
+# Load the segmentation codes
+with open(REGEXCODES_FILE) as f:
+    data = json.load(f)
+    DEFAULT_REGEX_CODES = data['segmentation_codes']
 
 def set_all_to_zero(client, code=0):
     """Will set every mesh to the 0 id

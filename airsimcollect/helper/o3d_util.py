@@ -32,10 +32,15 @@ def update_point_cloud(pcd, points):
     pcd.points = o3d.utility.Vector3dVector(points_filt)
 
 
-def translate_meshes(meshes, x_amt=0, y_amt=20):
+def translate_meshes(meshes, shift_x=True):
     x_amt_ = 0
     y_amt_ = 0
     for i, mesh in enumerate(meshes):
+        x_amt, y_amt, z_amt = mesh.get_axis_aligned_bounding_box().get_extent()
+        if shift_x:
+            x_amt = 0.0
+        else:
+            y_amt = 0.0
         mesh.translate([x_amt_, y_amt_, 0])
         x_amt_ += x_amt
         y_amt_ += y_amt

@@ -6,7 +6,7 @@ import numpy as np
 import airsim
 
 from airsimcollect.helper.helper_transforms import parse_lidarData
-from airsimcollect.o3d_util import get_extrinsics, set_view
+from airsimcollect.helper.o3d_util import get_extrinsics, set_view
 
 def set_up_aisim():
     # connect to the AirSim simulator

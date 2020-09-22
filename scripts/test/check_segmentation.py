@@ -3,20 +3,12 @@ import json
 import airsim
 from os import path
 
-from airsimcollect.segmentation import set_segmentation_ids
+from airsimcollect.segmentation import set_segmentation_ids, DEFAULT_REGEX_CODES
 
 
-BASE_DIR = path.dirname(path.dirname(__file__))
-DATA_DIR = path.join(BASE_DIR, 'assets', 'data')
-REGEXCODES_FILE = path.join(DATA_DIR, 'segmentation_codes.json')
-
-# Load the segmentation codes
-with open(REGEXCODES_FILE) as f:
-    data = json.load(f)
-    codes = data['segmentation_codes']
 
 print("Loaded Segmentation Codes")
-print(codes)
+print(DEFAULT_REGEX_CODES)
 
 # connect to the AirSim simulator
 client = airsim.MultirotorClient()
@@ -24,7 +16,7 @@ client.confirmConnection()
 client.enableApiControl(True)
 
 # Write the codes
-set_segmentation_ids(client, codes)
+set_segmentation_ids(client, DEFAULT_REGEX_CODES)
 # Release Control
 client.enableApiControl(False)
 

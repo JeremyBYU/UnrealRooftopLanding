@@ -10,12 +10,11 @@ import matplotlib.pyplot as plt
 import yaml
 
 from airsimcollect.helper.helper_transforms import parse_lidarData
-from airsimcollect.helper.o3d_util import get_extrinsics, set_view, handle_shapes
-from airsimcollect.helper.helper_mesh import create_meshes_cuda, update_open_3d_mesh_from_tri_mesh
+from airsimcollect.helper.o3d_util import get_extrinsics, set_view, handle_shapes, update_point_cloud, translate_meshes
+from airsimcollect.helper.helper_mesh import (
+    create_meshes_cuda, update_open_3d_mesh_from_tri_mesh, decimate_column_opc, get_planar_point_density, map_pd_to_decimate_kernel)
 from airsimcollect.helper.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 
-from organizedpointfilters.utility.helper import (laplacian_opc, laplacian_then_bilateral_opc_cuda,
-                                                  create_mesh_from_organized_point_cloud_with_o3d)
 
 from fastga import GaussianAccumulatorS2, IcoCharts
 
@@ -27,7 +26,6 @@ COLOR_PALETTE = list(
 
 # Lidar Point Cloud Image
 lidar_beams = 64
-
 
 
 def set_up_aisim():
@@ -58,22 +56,6 @@ def update_view(vis):
     set_view(vis, extrinsics)
 
 
-def update_point_cloud(pcd, points):
-    if points.ndim > 2:
-        points = points.reshape((points.shape[0] * points.shape[1], 3))
-    points_filt = points[~np.isnan(points).any(axis=1)]
-    pcd.points = o3d.utility.Vector3dVector(points_filt)
-
-
-def translate_meshes(meshes, x_amt=0, y_amt=20):
-    x_amt_ = 0
-    y_amt_ = 0
-    for i, mesh in enumerate(meshes):
-        mesh.translate([x_amt_, y_amt_, 0])
-        x_amt_ += x_amt
-        y_amt_ += y_amt
-
-
 def main():
 
     # Load yaml file
@@ -102,6 +84,9 @@ def main():
     ga = GaussianAccumulatorS2(level=config['fastga']['level'])
     ico = IcoCharts(level=config['fastga']['level'])
 
+    path = [airsim.Vector3r(0, 0, -5), airsim.Vector3r(0, 0, -10)] * 20
+    client.moveOnPathAsync(path, 2, 60)
+
     prev_time = time.time()
     with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Info):
         while True:
@@ -113,22 +98,28 @@ def main():
                 # get columns of organized point cloud
                 num_cols = int(points.shape[0] / lidar_beams)
                 opc = points.reshape((lidar_beams, num_cols, 3))
+                point_density = get_planar_point_density(opc)
+                decimate_kernel = map_pd_to_decimate_kernel(point_density)
+                print(
+                    f"Planar point density: {point_density:.1f}; Decimate Kernel: {decimate_kernel}")
+                # 0. Decimate
+                opc_decimate, alg_timings = decimate_column_opc(
+                    opc, kernel_size=decimate_kernel, num_threads=1)
                 # 1. Create mesh
-                tri_mesh, alg_timings = create_meshes_cuda(
-                    opc, **config['mesh']['filter'])
+                tri_mesh, timings = create_meshes_cuda(
+                    opc_decimate, **config['mesh']['filter'])
+                alg_timings.update(timings)
                 # 2. Get dominant plane normals
                 avg_peaks, _, _, _, timings = extract_all_dominant_plane_normals(
                     tri_mesh, ga_=ga, ico_chart_=ico, **config['fastga'])
                 alg_timings.update(timings)
                 # 3. Extract Planes and Polygons
                 planes, obstacles, timings = extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks, pl_=pl,
-                                                                                filter_polygons=True, optimized=True,
-                                                                                postprocess=config['polygon']['postprocess'])
+                                                                                   filter_polygons=True, optimized=True,
+                                                                                   postprocess=config['polygon']['postprocess'])
                 alg_timings.update(timings)
-
-                all_polys = handle_shapes(vis, planes, obstacles, all_polys)
+                all_polys = handle_shapes(vis, planes, obstacles, all_polys) # 100 ms to plot.... wish we had opengl line control
                 # print(planes)
-                # print(alg_timings)
                 # update the open3d geometries
                 update_point_cloud(pcd, points)
                 update_open_3d_mesh_from_tri_mesh(mesh_smooth, tri_mesh)

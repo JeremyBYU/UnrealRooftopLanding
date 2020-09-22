@@ -9,8 +9,8 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 
 from airsimcollect.helper.helper_transforms import parse_lidarData
-from airsimcollect.helper.o3d_util import get_extrinsics, set_view
-
+from airsimcollect.helper.o3d_util import get_extrinsics, set_view, update_point_cloud, translate_meshes
+from airsimcollect.helper.helper_mesh import decimate_column_opc
 from organizedpointfilters.utility.helper import (laplacian_opc, laplacian_then_bilateral_opc_cuda,
                                                   create_mesh_from_organized_point_cloud_with_o3d)
 
@@ -29,6 +29,7 @@ def pick_valid_normals(opc_normals):
     mask = ~np.isnan(opc_normals).any(axis=1)
     tri_norms = np.ascontiguousarray(opc_normals[mask, :])
     return tri_norms
+
 
 def set_up_aisim():
     # connect to the AirSim simulator
@@ -57,21 +58,6 @@ def update_view(vis):
     vis.reset_view_point(True)
     set_view(vis, extrinsics)
 
-
-def update_point_cloud(pcd, points):
-    if points.ndim > 2:
-        points = points.reshape((points.shape[0] * points.shape[1], 3))
-    points_filt = points[~np.isnan(points).any(axis=1)]
-    pcd.points = o3d.utility.Vector3dVector(points_filt)
-
-
-def translate_meshes(meshes, x_amt=0, y_amt=20):
-    x_amt_ = 0
-    y_amt_ = 0
-    for i, mesh in enumerate(meshes):
-        mesh.translate([x_amt_, y_amt_, 0])
-        x_amt_ += x_amt
-        y_amt_ += y_amt
 
 def update_mesh(mesh, opc, opc_normals=None):
     opc_new = opc.astype('f8')
@@ -104,6 +90,7 @@ def update_mesh(mesh, opc, opc_normals=None):
         mesh.compute_triangle_normals()
         mesh.compute_vertex_normals()
 
+
 def main():
     client = set_up_aisim()
     o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Debug)
@@ -121,6 +108,9 @@ def main():
     vis.add_geometry(mesh_smooth)
     vis.add_geometry(axis)
 
+    path = [airsim.Vector3r(0, 0, -5),airsim.Vector3r(0, 0, -10)] * 20
+    client.moveOnPathAsync(path, 2, 120)
+
     prev_time = time.time()
     while True:
         if time.time() - prev_time > 0.05:
@@ -130,10 +120,11 @@ def main():
             # get columns of organized point cloud
             num_cols = int(points.shape[0] / lidar_beams)
             opc = points.reshape((lidar_beams, num_cols, 3))
+            opc_decimate, timings = decimate_column_opc(opc, kernel_size=2, num_threads=1)
             # smooth organized point cloud
             opc_smooth, opc_normals = laplacian_then_bilateral_opc_cuda(
-                opc, loops_laplacian=1, _lambda=0.5, loops_bilateral=4, sigma_angle=0.2, sigma_length=0.3)
-            opc_smooth = opc_smooth.reshape((lidar_beams, num_cols, 3))
+                opc_decimate, loops_laplacian=1, _lambda=0.5, loops_bilateral=4, sigma_angle=0.2, sigma_length=0.3)
+            opc_smooth = opc_smooth.reshape((lidar_beams, opc_decimate.shape[1], 3))
 
             # update the open3d geometries
             update_point_cloud(pcd, points)

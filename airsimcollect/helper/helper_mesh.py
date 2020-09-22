@@ -16,6 +16,39 @@ from polylidar import extract_tri_mesh_from_organized_point_cloud, MatrixDouble
 COLOR_PALETTE = list(map(colors.to_rgb, plt.rcParams['axes.prop_cycle'].by_key()['color']))
 
 
+def get_planar_point_density(opc, ds:int=2):
+    rows = opc.shape[0]
+    cols = opc.shape[1]
+    start_row = int(rows/(ds*2))
+    end_row = start_row + int(rows/ds)
+    start_col = int(cols/int(ds*2))
+    end_col = start_col + int(cols/ds)
+
+    n_points = (end_row - start_row) * (end_col - start_col)
+
+    opc_sub = opc[start_row:end_row, start_col:end_col, :2]
+    min_x = np.nanmin(opc_sub[:, :, 0])
+    max_x = np.nanmax(opc_sub[:, :, 0])
+    min_y = np.nanmin(opc_sub[:, :, 1])
+    max_y = np.nanmax(opc_sub[:, :, 1])
+
+    x_range = np.abs(max_x - min_x)
+    y_range = np.abs(max_y - min_y)
+
+    area = x_range * y_range
+
+    point_density = n_points / area
+
+    return point_density
+
+def map_pd_to_decimate_kernel(point_density:float):
+    if point_density < 40:
+        return 1
+    elif point_density < 70:
+        return 2
+    else:
+        return 3
+
 def create_open_3d_mesh_from_tri_mesh(tri_mesh):
     """Create an Open3D Mesh given a Polylidar TriMesh"""
     triangles = np.asarray(tri_mesh.triangles)
@@ -74,6 +107,39 @@ def create_open_3d_mesh(triangles, points, triangle_normals=None, color=COLOR_PA
     mesh_2d.paint_uniform_color(color)
     mesh_2d.compute_vertex_normals()
     return mesh_2d
+
+def decimate_column_opc(opc, kernel_size=2, num_threads=1, **kwargs):
+    """Performs Laplacian Smoothing on an organized point cloud
+
+    Arguments:
+        opc {ndarray} -- Organized Point Cloud MXNX3, Assumed F64
+
+    Keyword Arguments:
+        kernel_size {int} -- Kernel Size (How many neighbors to intregrate) (default: {2})
+
+    Returns:
+        ndarray -- Smoothed Point Cloud, MX(N/kernel_size)X3, F64
+    """
+    opc_float = (np.ascontiguousarray(opc[:, :, :3])).astype(np.float32)
+
+    a_ref = Matrix3fRef(opc_float)
+    t1 = time.perf_counter()
+    if kernel_size == 1:
+        return opc, dict(t_decimate=0.0)
+    if kernel_size == 2:
+        b_cp = opf.filter.decimate_column_K2(a_ref, num_threads=num_threads)
+    elif kernel_size == 3:
+        b_cp = opf.filter.decimate_column_K3(a_ref, num_threads=num_threads)
+    else:
+        b_cp = opf.filter.decimate_column_K4(a_ref, num_threads=num_threads)
+    t2 = time.perf_counter()
+    
+    timings = dict(t_decimate=(t2 - t1) * 1000)
+
+    opc_float_out = np.asarray(b_cp)
+    opc_out = opc_float_out.astype(np.float64)
+
+    return opc_out, timings
 
 
 def laplacian_opc(opc, loops=5, _lambda=0.5, kernel_size=3, **kwargs):

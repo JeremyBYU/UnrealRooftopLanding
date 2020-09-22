@@ -47,11 +47,12 @@ def main():
 
     prev_time = time.time()
     while True:
-        if time.time() - prev_time > 0.5:
+        if time.time() - prev_time > 0.05:
             points = get_lidar_data(client)
             points = points[~np.isnan(points).any(axis=1)]
             pcd.points = o3d.utility.Vector3dVector(points)
             print(points.shape)
+            prev_time = time.time()
         vis.update_geometry(pcd)
         vis.poll_events()
         update_view(vis)

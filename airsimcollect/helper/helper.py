@@ -1,6 +1,7 @@
 from os import path
 import logging
 import collections
+import json
 
 from shapely.geometry import shape
 import geojson
@@ -14,6 +15,8 @@ logger = logging.getLogger("AirSimCapture")
 
 DIR_PATH = path.dirname(path.realpath(__file__))
 
+WINDOWS_AIRSIM_SETTINGS_PATH = '~/Documents/AirSim/settings.json'
+WINDOWS_AIRSIM__SETTINGS_PATH_FULL = path.expanduser(WINDOWS_AIRSIM_SETTINGS_PATH)
 
 DEFAULT_SEGMENTATION = {
     "sensor": "Image",
@@ -64,6 +67,10 @@ DEFAULT_CONFIG = {
     "collector_file_prefix": ""
 }
 
+def get_airsim_settings_file():
+    with open(WINDOWS_AIRSIM__SETTINGS_PATH_FULL) as fh:
+        data = json.load(fh)
+    return data
 
 def update(d, u):
     for k, v in u.items():

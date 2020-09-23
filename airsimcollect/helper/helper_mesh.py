@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 from scipy.signal import find_peaks
 from scipy.stats import relfreq
+from scipy.spatial import ConvexHull
 
 # from polylidar_plane_benchmark.utility.o3d_util import create_open_3d_mesh_from_tri_mesh
 
@@ -21,9 +22,10 @@ COLOR_PALETTE = list(
 ABSURD_NUMBER = 0
 HEIGHT_THRESHOLD = 0.1
 
-def get_planar_point_density(opc, ds: int = 2, bucket_size=0.5,
+def get_planar_point_density(opc, ds: int = 2, bucket_size=0.5, z_col=2,
                              find_peaks_kwargs=dict(height=0.10, threshold=None, distance=2,
                                                     width=None, prominence=0.07)):
+    
     rows = opc.shape[0]
     cols = opc.shape[1]
     start_row = int(rows/(ds*2))
@@ -32,19 +34,24 @@ def get_planar_point_density(opc, ds: int = 2, bucket_size=0.5,
     end_col = start_col + int(cols/ds)
 
     opc_sub = opc[start_row:end_row, start_col:end_col, :3]
-
-    z_values = opc_sub[:, :, 2].ravel() + ABSURD_NUMBER
+    t1 = time.perf_counter() * 1000
+    z_values = opc_sub[:, :, z_col].ravel() + ABSURD_NUMBER
     z_values = z_values[~np.isnan(z_values)]
+    t2 = time.perf_counter() * 1000
     if z_values.shape[0] < 1:
-        return None, None
+        return None
     n_buckets = int((np.max(z_values) - np.min(z_values)) / bucket_size) + 1
+    t3 = t2
+    t4 = t2
     if n_buckets > 3:
         # Get histogram
         cum_count, lower_limit, bin_size, extrapoints = relfreq(z_values, n_buckets)
+        t3 = time.perf_counter() * 1000
         z_values_buckets = [lower_limit +  i * bin_size for i in range(n_buckets)]
         cum_count = np.insert(cum_count, 0, [0.05])
         # Detect peaks in histogram
         peaks, _ = find_peaks(cum_count, **find_peaks_kwargs)
+        t4 = time.perf_counter() * 1000
         if peaks.size > 0:
             height_rooftop = z_values_buckets[peaks[0]] # choose the "highest" peak, one closest to drone, z increases the farther away from drone
             mask_a = opc_sub[:, :, 2] < (height_rooftop + bin_size + HEIGHT_THRESHOLD)
@@ -56,24 +63,37 @@ def get_planar_point_density(opc, ds: int = 2, bucket_size=0.5,
     else:
         # import ipdb; ipdb.set_trace()
         roof_points = opc_sub.reshape((opc_sub.shape[0] * opc_sub.shape[1], 3))
+    roof_points = roof_points[~np.isnan(roof_points).any(axis=1)]
+    t5 = time.perf_counter() * 1000
 
+    roof_points_xy = np.delete(roof_points, z_col,1)
+    n_points = roof_points_xy.shape[0]
+    if n_points < 3:
+        return None
     # print(z_values)
     # print(cum_count, lower_limit, bin_size, extrapoints, z_values_buckets)
     # print(peaks)
+    hull = ConvexHull(roof_points_xy[:, :2])
+    hull_area = hull.volume
+    t6 = time.perf_counter() * 1000
 
-    n_points = roof_points.shape[0]
-
-    min_x = np.nanmin(roof_points[:, 0])
-    max_x = np.nanmax(roof_points[:, 0])
-    min_y = np.nanmin(roof_points[:, 1])
-    max_y = np.nanmax(roof_points[:, 1])
+    min_x = np.nanmin(roof_points_xy[:, 0])
+    max_x = np.nanmax(roof_points_xy[:, 0])
+    min_y = np.nanmin(roof_points_xy[:, 1])
+    max_y = np.nanmax(roof_points_xy[:, 1])
 
     x_range = np.abs(max_x - min_x)
     y_range = np.abs(max_y - min_y)
 
     area = x_range * y_range
 
-    point_density = n_points / area
+    # point_density = n_points / area
+    point_density = n_points / hull_area
+
+    t7 = time.perf_counter() * 1000
+
+    # print(f"n_buckets: {n_buckets}, T1: {t2-t1}, T2: {t3-t2}, T3: {t4-t3}, T4: {t5-t4}, T5:{t6-t5}, T6:{t7-t6}")
+    # print(f"area: {area}, hull_area = {hull_area}")
 
     return point_density
 

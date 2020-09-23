@@ -10,14 +10,14 @@ mesh:
     sigma_angle: 0.2 # std of distance between triangles normals
 polylidar: # Parameters we send to polylidar. Determine plane and polygon extraction from point clouds.
   alpha: 0.0 # must be set to 0.0 if using lmax
-  lmax: 1.0 # maximum distance between points in plane for spatial connection
-  z_thresh: 0.1 # enforce point to plane distance constraints during region growing.
+  lmax: 1.5 # maximum distance between points in plane for spatial connection
+  z_thresh: 0.2 # enforce point to plane distance constraints during region growing.
   norm_thresh: 0.96 # Not used, set to the same as norm_thresh_min. Will deprecate later.
   norm_thresh_min: 0.96 # triangles must have a minimum amount of planarity.
   min_hole_vertices : 4 # minimum number of vertices in a hole to return
   min_triangles: 100 # minimum number of triangles needed to make a plane
 fastga: # Parameters used for dominant plane normal estimation
-  level: 4 # refinement level of the gaussian accumulator
+  level: 5 # refinement level of the gaussian accumulator
   down_sample_fraction: 0.50 # only use X% of triangle normals from mesh for integration, lower the faster
   find_peaks_kwargs: # peak detection arguments
     threshold_abs: 50 # [0-255], minimum value of normalized histogram of S2 to be a peak
@@ -34,11 +34,11 @@ polygon:
     filter: # obstacles must have these characteristics
       hole_area:
         min: 0.10   # m^2
-        max: 20.0 # m^2
+        max: 80.0 # m^2
       hole_vertices:
         min: 4
       plane_area:
-        min: .10 # m^2
+        min: 4 # m^2
     # These parameters correspond to Shapely polygon geometry operations
     positive_buffer: 0.1 # m, Positively expand polygon.  Fills in small holes
     negative_buffer: 0.2 # m, Negative buffer to polygon. Expands holes and constricts outer hull of polygon

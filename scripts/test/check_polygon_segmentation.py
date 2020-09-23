@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import yaml
 from airsim import ImageRequest, ImageResponse
 
+from airsimcollect.helper.helper import get_airsim_settings_file
 from airsimcollect.helper.helper_transforms import parse_lidarData
 from airsimcollect.helper.o3d_util import get_extrinsics, set_view, handle_shapes, update_point_cloud, translate_meshes
 from airsimcollect.helper.helper_mesh import (
@@ -25,6 +26,7 @@ from polylidar import MatrixDouble, extract_tri_mesh_from_organized_point_cloud,
 
 # Lidar Point Cloud Image
 lidar_beams = 64
+
 
 def set_up_airsim(client):
     # connect to the AirSim simulator
@@ -46,15 +48,24 @@ def get_lidar_data(client: airsim.MultirotorClient):
     points = parse_lidarData(data)
     return points
 
-def get_image_data(client:airsim.MultirotorClient):
+
+def get_image_data(client: airsim.MultirotorClient):
     png_image = client.simGetImage("0", airsim.ImageType.Segmentation)
     plt.imshow(png_image)
+
 
 def update_view(vis):
     extrinsics = get_extrinsics(vis)
     vis.reset_view_point(True)
     set_view(vis, extrinsics)
 
+def get_z_col():
+    airsim_settings = get_airsim_settings_file()
+    data_frame = airsim_settings['Vehicles']['Drone1']['Sensors']['0']['DataFrame']
+    z_col = 2
+    if data_frame == 'SensorLocalFrame':
+        z_col = 0
+    return z_col
 
 def main():
 
@@ -66,6 +77,9 @@ def main():
             print("Error parsing yaml")
     client = airsim.MultirotorClient()
     set_segmentation_ids(client, DEFAULT_REGEX_CODES)
+
+    z_col = get_z_col()
+
     set_up_airsim(client)
     o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Debug)
 
@@ -77,6 +91,8 @@ def main():
 
     vis = o3d.visualization.Visualizer()
     vis.create_window()
+    # view_control = vis.get_view_control()
+    # view_control.set_up([0,0,-1])
     vis.add_geometry(pcd)
     # vis.add_geometry(pcd_pd)
     vis.add_geometry(mesh_smooth)
@@ -87,10 +103,9 @@ def main():
     ga = GaussianAccumulatorS2(level=config['fastga']['level'])
     ico = IcoCharts(level=config['fastga']['level'])
 
-    path1 = [airsim.Vector3r(0, 0, -5), airsim.Vector3r(5, 0, -5), airsim.Vector3r(5, 5, -5), airsim.Vector3r(0, 5, -5)] * 2
-    path2 = [airsim.Vector3r(0, 0, -10), airsim.Vector3r(5, 0, -10), airsim.Vector3r(5, 5, -10), airsim.Vector3r(0, 5, -10)] * 2
-    path = [*path1, *path2]
-    client.moveOnPathAsync(path, 2, 60)
+    path = [airsim.Vector3r(-10, -10, -10), airsim.Vector3r(10, -10, -15), airsim.Vector3r(10, 10, -10), airsim.Vector3r(-10, 10, -15)] * 4
+    # path = [*path1, *path2]
+    client.moveOnPathAsync(path, 2.5, 60)
 
     prev_time = time.time()
     with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Info):
@@ -103,10 +118,11 @@ def main():
                 # get columns of organized point cloud
                 num_cols = int(points.shape[0] / lidar_beams)
                 opc = points.reshape((lidar_beams, num_cols, 3))
-                point_density = get_planar_point_density(opc)
+                # point_density = 35
+                point_density = get_planar_point_density(opc, z_col=z_col)
                 if point_density is None:
                     print("Center of point cloud only has NaNs!")
-                    continue
+                    point_density = 20
                 decimate_kernel = map_pd_to_decimate_kernel(point_density)
                 print(
                     f"Planar point density: {point_density:.1f}; Decimate Kernel: {decimate_kernel}")
@@ -121,12 +137,14 @@ def main():
                 avg_peaks, _, _, _, timings = extract_all_dominant_plane_normals(
                     tri_mesh, ga_=ga, ico_chart_=ico, **config['fastga'])
                 alg_timings.update(timings)
+                print(avg_peaks)
                 # 3. Extract Planes and Polygons
                 planes, obstacles, timings = extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks, pl_=pl,
                                                                                    filter_polygons=True, optimized=True,
                                                                                    postprocess=config['polygon']['postprocess'])
                 alg_timings.update(timings)
-                all_polys = handle_shapes(vis, planes, obstacles, all_polys) # 100 ms to plot.... wish we had opengl line-width control
+                # 100 ms to plot.... wish we had opengl line-width control
+                all_polys = handle_shapes(vis, planes, obstacles, all_polys)
                 # print(planes)
                 # update the open3d geometries
                 update_point_cloud(pcd, points)

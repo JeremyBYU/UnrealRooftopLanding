@@ -19,8 +19,7 @@ from airsim import Vector3r, Pose, to_quaternion, ImageRequest
 from airsimcollect.segmentation import set_all_to_zero, set_segmentation_ids
 from airsimcollect.helper.helper import update, image_meta_data_json, update_airsim_settings
 
-from airsimcollect.helper.helper_transforms import (parse_lidarData, create_projection_matrix, classify_points,
-                                             transform_to_cam, project_points_img, get_colors_from_image, get_seg2rgb_map, colors2class)
+from airsimcollect.helper.helper_transforms import (parse_lidarData, create_projection_matrix, classify_points)
 
 logger = logging.getLogger("AirSimCapture")
 
@@ -125,7 +124,6 @@ class AirSimCollect(object):
                 record = self.collect_data_at_point(pos, rot)
                 records.append(record)
 
-
             logger.debug("Time Elapsed: %.2f", elapsed)
 
         if records:
@@ -168,9 +166,10 @@ class AirSimCollect(object):
                 else:
                     img1d = np.fromstring(
                         response.image_data_uint8, dtype=np.uint8)
-                    # TODO shape should be tuple
                     img_rgba = img1d.reshape(
-                        response.height, response.width, 3)
+                        (response.height, response.width, 3))
+                    # bgr to rgb
+                    img_rgba[:, :, [0, 2]] = img_rgba[:, :, [2, 0]]
                     img = Image.fromarray(img_rgba)
                     img.save(file_path, "PNG")
                 # logger.("Image Global ID: %d, Type %d, size %d, pos %s", global_id, response.image_type,
@@ -206,7 +205,8 @@ class AirSimCollect(object):
             height = img_meta['height']
             width = img_meta['width']
 
-            point_classes, _, _ = classify_points(img_meta['data'], points, img_meta, self.airsim_settings)
+            point_classes, _, _ = classify_points(
+                img_meta['data'], points, img_meta, self.airsim_settings)
 
             # proj_mat = create_projection_matrix(height, width)
             # # Transform NED points to camera coordinate system (not NED)

@@ -62,7 +62,7 @@ def sample_circle(focus_point, radius, yaw_range, yaw_delta):
     theta = np.linspace(math.radians(
         yaw_range[0]), math.radians(yaw_range[1]), num_yaw, endpoint=yaw_endpoint)
 
-    phi = np.zeros_like(theta)
+    phi = np.ones_like(theta) * np.pi/2
     roll = np.zeros_like(theta)
 
     x = np.cos(theta) * radius + focus_point[0]
@@ -70,7 +70,7 @@ def sample_circle(focus_point, radius, yaw_range, yaw_delta):
     z = np.ones_like(phi) * focus_point[2]
 
     collection_points = np.stack((x, y, z, phi, roll, theta), axis=1)
-    collection_points = np.append(collection_points,[[*focus_point, 0, 0, 0]], axis=0)
+    collection_points = np.append(collection_points,[[*focus_point, np.pi/2.0, 0, 0]], axis=0)
 
     return collection_points
 

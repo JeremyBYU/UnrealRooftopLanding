@@ -33,10 +33,13 @@ def num_collection_points(yaw_range, yaw_delta, pitch_range, pitch_delta):
         if int(abs(yaw_range[0] - yaw_range[1])) == 360:
             num_yaw -= 1
             yaw_endpoint = False
-    if pitch_delta < .01:
+
+
+    if pitch_delta is None or pitch_delta < .01:
         num_phi = 1
     else:
         num_phi = int((abs(pitch_range[0] - pitch_range[1])) / pitch_delta) + 1
+
 
     return num_yaw, num_phi, num_phi * num_yaw, yaw_endpoint
 
@@ -53,6 +56,23 @@ def remove_collision(collection_points, collisions):
         obstacle_mask = obstacle_mask | (z_m & x_m & y_m)
     return collection_points[~obstacle_mask]
 
+
+def sample_circle(focus_point, radius, yaw_range, yaw_delta):
+    num_yaw, num_phi, _, yaw_endpoint = num_collection_points(yaw_range, yaw_delta, None, None)
+    theta = np.linspace(math.radians(
+        yaw_range[0]), math.radians(yaw_range[1]), num_yaw, endpoint=yaw_endpoint)
+
+    phi = np.zeros_like(theta)
+    roll = np.zeros_like(theta)
+
+    x = np.cos(theta) * radius + focus_point[0]
+    y = np.sin(theta) * radius + focus_point[1]
+    z = np.ones_like(phi) * focus_point[2]
+
+    collection_points = np.stack((x, y, z, phi, roll, theta), axis=1)
+    collection_points = np.append(collection_points,[[*focus_point, 0, 0, 0]], axis=0)
+
+    return collection_points
 
 def sample_sphere(focus_point, radius, pitch_range, pitch_delta, yaw_range, yaw_delta):
     num_yaw, num_phi, _, yaw_endpoint = num_collection_points(yaw_range, yaw_delta, pitch_range, pitch_delta)
@@ -109,7 +129,7 @@ def genereate_radii(feature, radius_min=0.0, radius_increase=0.0, num_spheres=1,
         radius_min_ += radius_increase
     else:
         minx, miny, maxx, maxy = geom.bounds
-        radius_geom = max(maxx - minx, maxy - miny) / 2.0
+        radius_geom = min(maxx - minx, maxy - miny) / 2.0
         radius_min_ = radius_geom if radius_min == 0.0 else radius_min
         radius_min_ += radius_increase
     return [radius_min_ + radius_delta * i for i in range(num_spheres)]
@@ -203,18 +223,20 @@ def cli():
 @click.option('-ic', '--ignore-collision', is_flag=True,
               help="By default this module ensures the collection point does not collide with any known features " +
               "in the map. Set this flag to ignore this check.")
+@click.option('-sc', '--sampling-method', type=click.Choice(['sphere', 'circle']), default='sphere',
+              help='Whether we are sampling on a sphere or on a 2D circle at a height offset from the focus point')
 @click.option('-pp', '--plot-points', is_flag=True,
               help="Whether to plot points for viewing. Debug only.")
 @click.option('-d', '--debug', is_flag=True,
               help="Whether to print debug statements")
 def generate(map_path, pitch_range, pitch_delta, yaw_range, yaw_delta, height_offset, num_spheres, radius_min, radius_increase, radius_delta,
-             focus_point, num_focus_points, record_feature_name, out, append_out, seed, ignore_collision, plot_points, debug):
+             focus_point, num_focus_points, record_feature_name, out, append_out, seed, ignore_collision, sampling_method, plot_points, debug):
 
     if debug:
         logger.setLevel(logging.DEBUG)
-    logger.debug("{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}".format(
+    logger.debug("{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}".format(
         map_path, pitch_range, pitch_delta, yaw_delta, num_spheres, radius_min, radius_increase, radius_delta, focus_point,
-        num_focus_points, ignore_collision, out, seed, plot_points))
+        num_focus_points, ignore_collision, out, seed, sampling_method, plot_points))
 
     click.secho("Generating collection points...")
 
@@ -235,8 +257,12 @@ def generate(map_path, pitch_range, pitch_delta, yaw_range, yaw_delta, height_of
         for focus_point_ in focus_points:
             logger.debug("At focus point: %s", focus_point_)
             for radius in radii:
-                collection_points = sample_sphere(focus_point_, radius, pitch_range,
-                                                  pitch_delta, yaw_range, yaw_delta)
+                if sampling_method == 'sphere':
+                    collection_points = sample_sphere(focus_point_, radius, pitch_range,
+                                                    pitch_delta, yaw_range, yaw_delta)
+                else:
+                    collection_points = sample_circle(focus_point_, radius, yaw_range, yaw_delta)
+                                                    
                 logger.debug("At radius level: %s", radius)
                 if not ignore_collision:
                     prev_shape = collection_points.shape
@@ -248,7 +274,7 @@ def generate(map_path, pitch_range, pitch_delta, yaw_range, yaw_delta, height_of
                 if record_feature_name:
                     all_feature_names.extend([feature['properties'][record_feature_name]] * collection_points.shape[0])
                 if plot_points:
-                    plot_collection_points(collection_points, focus_point_, radius, feature)
+                    plot_collection_points(collection_points, focus_point_, radius, feature, sampling_method)
 
     all_points = np.vstack(all_points)
     click.echo(

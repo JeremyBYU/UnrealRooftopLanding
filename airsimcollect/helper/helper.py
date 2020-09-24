@@ -8,6 +8,8 @@ from shapely.geometry import shape
 import geojson
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import axes3d
+from matplotlib.patches import Circle, PathPatch
+import mpl_toolkits.mplot3d.art3d as art3d
 import numpy as np
 from functools import reduce
 import quaternion
@@ -225,26 +227,32 @@ def set_axes_equal(ax):
 
     ax.set_box_aspect([1,1,1])
 
-def plot_collection_points(points, center, radius, feature=None):
+def plot_collection_points(points, center, radius, feature=None, sampling_method='sphere'):
     fig, ax = plt.subplots(
         1, 1, subplot_kw={'projection': '3d'})
     # Plot points
     uvw = center - points[:, :3]
+    if sampling_method == 'circle':
+        uvw[-1, :] = uvw[0,:]
     ax.quiver(points[:, 0], points[:, 1],
               points[:, 2], *uvw.T, length=0.25)
-
 
     if feature is not None:
         coords = np.array(feature['geometry'].exterior) # get exterior
         ax.plot3D(coords[:, 0], coords[:,1], coords[:, 2], 'red')
 
     # generate wire mesh for sphere
-    phi = np.linspace(0, np.pi, 20)
-    theta = np.linspace(0, 2 * np.pi, 40)
-    x = np.outer(np.sin(theta), np.cos(phi)) * radius + center[0]
-    y = np.outer(np.sin(theta), np.sin(phi)) * radius + center[1]
-    z = np.outer(np.cos(theta), np.ones_like(phi)) * radius + center[2]
-    ax.plot_wireframe(x, y, z, color='k', rstride=1, cstride=1, linewidth=0.25)
+    if sampling_method == 'sphere':
+        phi = np.linspace(0, np.pi, 20)
+        theta = np.linspace(0, 2 * np.pi, 40)
+        x = np.outer(np.sin(theta), np.cos(phi)) * radius + center[0]
+        y = np.outer(np.sin(theta), np.sin(phi)) * radius + center[1]
+        z = np.outer(np.cos(theta), np.ones_like(phi)) * radius + center[2]
+        ax.plot_wireframe(x, y, z, color='k', rstride=1, cstride=1, linewidth=0.25)
+    else:
+        p = Circle(center[:2], radius, ec='k', fill=False)
+        ax.add_patch(p)
+        art3d.pathpatch_2d_to_3d(p, z=center[2], zdir="z")
     ax.set_xlabel('X axis')
     ax.set_ylabel('Y axis')
     ax.set_zlabel('Z axis')

@@ -50,22 +50,19 @@ def get_lidar_data(client: airsim.MultirotorClient):
 
 
 def get_image_data(client: airsim.MultirotorClient):
-    png_image = client.simGetImage("0", airsim.ImageType.Segmentation)
-    plt.imshow(png_image)
+    response:ImageResponse = client.simGetImage("0", airsim.ImageType.Segmentation)
+
+    img1d = np.fromstring(response.image_data_uint8, dtype=np.uint8)
+    # TODO shape should be tuple
+    img_rgba = img1d.reshape(
+        response.height, response.width, 4)
+    plt.imshow(img_rgba)
 
 
 def update_view(vis):
     extrinsics = get_extrinsics(vis)
     vis.reset_view_point(True)
     set_view(vis, extrinsics)
-
-def get_z_col():
-    airsim_settings = get_airsim_settings_file()
-    data_frame = airsim_settings['Vehicles']['Drone1']['Sensors']['0']['DataFrame']
-    z_col = 2
-    if data_frame == 'SensorLocalFrame':
-        z_col = 0
-    return z_col
 
 def main():
 
@@ -78,10 +75,11 @@ def main():
     client = airsim.MultirotorClient()
     set_segmentation_ids(client, DEFAULT_REGEX_CODES)
 
-    z_col = get_z_col()
+    air_sim_settings = get_airsim_settings_file()
+    z_col = air_sim_settings['lidar_z_col']
 
     set_up_airsim(client)
-    o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Debug)
+    o3d.utility.set_verbosity_level(o3d.utility.VerbosityLevel.Info)
 
     pcd = o3d.geometry.PointCloud()
     # pcd_pd = o3d.geometry.PointCloud()
@@ -91,8 +89,6 @@ def main():
 
     vis = o3d.visualization.Visualizer()
     vis.create_window()
-    # view_control = vis.get_view_control()
-    # view_control.set_up([0,0,-1])
     vis.add_geometry(pcd)
     # vis.add_geometry(pcd_pd)
     vis.add_geometry(mesh_smooth)
@@ -104,8 +100,9 @@ def main():
     ico = IcoCharts(level=config['fastga']['level'])
 
     path = [airsim.Vector3r(-10, -10, -10), airsim.Vector3r(10, -10, -15), airsim.Vector3r(10, 10, -10), airsim.Vector3r(-10, 10, -15)] * 4
-    # path = [*path1, *path2]
     client.moveOnPathAsync(path, 2.5, 60)
+
+    # get_image_data(client)
 
     prev_time = time.time()
     with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Info):

@@ -8,8 +8,10 @@ import geojson
 from matplotlib import pyplot as plt
 from mpl_toolkits.mplot3d import axes3d
 import numpy as np
+from functools import reduce
+import quaternion
 
-from airsim.types import ImageType
+from airsim.types import ImageType, Quaternionr, Vector3r
 
 logger = logging.getLogger("AirSimCapture")
 
@@ -67,10 +69,51 @@ DEFAULT_CONFIG = {
     "collector_file_prefix": ""
 }
 
+AIR_SIM_SETTINGS = dict()
+
+# Lidar frame is NED, need to transfrom to camera frame.
+AIR_SIM_SETTINGS['lidar_to_camera_quat'] = np.quaternion(0.5, -0.5, -0.5, -0.5)
+
+# Default no offset
+AIR_SIM_SETTINGS['lidar_to_camera_pos'] = Vector3r(x_val=0.0, y_val=0.0, z_val=0.0)
+
 def get_airsim_settings_file():
     with open(WINDOWS_AIRSIM__SETTINGS_PATH_FULL) as fh:
         data = json.load(fh)
-    return data
+    
+    # Determine relative position offset between camera and lidar frame 
+    lidar_x = deep_get(data, 'Vehicles.Drone1.Sensors.0.X')
+    lidar_y = deep_get(data, 'Vehicles.Drone1.Sensors.0.Y')
+    lidar_z = deep_get(data, 'Vehicles.Drone1.Sensors.0.Z')
+
+    camera_x = deep_get(data, 'Vehicles.Drone1.Cameras.0.X')
+    camera_y = deep_get(data, 'Vehicles.Drone1.Cameras.0.Y')
+    camera_z = deep_get(data, 'Vehicles.Drone1.Cameras.0.Z')
+
+
+    if lidar_x is not None and camera_x is not None:
+        delta_pose:Vector3r = AIR_SIM_SETTINGS['lidar_to_camera_pos']
+        dx = lidar_x - camera_x
+        dy = lidar_y - camera_y
+        dz = lidar_z - camera_z
+        delta_pose.x_val = dy
+        delta_pose.y_val = -dx
+        delta_pose.z_val = dz
+
+    # Determine if point cloud generated from lidar frame is in NED frame or local sensor frame
+    # if in sensor local frame then the 'X' axis (0) hold the 'range' measurement when pointed straight down
+    AIR_SIM_SETTINGS['lidar_local_frame'] = False
+    lidar_frame = deep_get(data, 'Vehicles.Drone1.Sensors.0.DataFrame')
+    AIR_SIM_SETTINGS['lidar_z_col'] = 2
+    if lidar_frame == 'SensorLocalFrame':
+        AIR_SIM_SETTINGS['lidar_z_col'] = 0
+        AIR_SIM_SETTINGS['lidar_local_frame'] = True
+
+    return AIR_SIM_SETTINGS
+
+
+def deep_get(dictionary, keys, default=None):
+    return reduce(lambda d, key: d.get(key, default) if isinstance(d, dict) else default, keys.split("."), dictionary)
 
 def update(d, u):
     for k, v in u.items():

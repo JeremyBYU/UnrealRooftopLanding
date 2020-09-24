@@ -52,7 +52,7 @@ def seg2rgb(number_of_classes, cmap_file=SEG_RGB_FILE):
     return colors
 
 
-def get_seg2rgb_map(number_of_classes, cmap_file=SEG_RGB_FILE, normalized=True):
+def get_seg2rgb_map(number_of_classes=None, cmap_file=SEG_RGB_FILE, normalized=True):
     with open(cmap_file, 'r') as f:
         all_rows = f.read().splitlines()
     seg2rgb_map = {}
@@ -68,16 +68,20 @@ def get_seg2rgb_map(number_of_classes, cmap_file=SEG_RGB_FILE, normalized=True):
         rgb.append(alpha)
         seg2rgb_map[int(seg)] = rgb
 
-    cmap_list = list(seg2rgb_map.values())[:number_of_classes]
+    cmap_list = list(seg2rgb_map.values())
+    if number_of_classes is not None:
+        cmap_list = cmap_list[:number_of_classes]
     return cmap_list, seg2rgb_map
 
 
 def colors2class(colors, seg2rgb_map):
     n_points = colors.shape[0]
-    classes = np.zeros((n_points,), dtype=np.float32)
+    classes = np.zeros((n_points,), dtype=np.uint8)
+    # import ipdb; ipdb.set_trace()
+    columns = colors.shape[1]
     for code, color in seg2rgb_map.items():
-        mask = (colors == color)[:, 0]
-        classes[mask] = code
+        mask = (colors == color[:columns])[:, 0]
+        classes[mask] = int(code)
     return classes
 
 

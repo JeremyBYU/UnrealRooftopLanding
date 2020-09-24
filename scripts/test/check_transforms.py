@@ -8,7 +8,7 @@ from airsim.types import ImageResponse, ImageRequest, Quaternionr, Vector3r
 import matplotlib.pyplot as plt
 import quaternion
 
-from airsimcollect.helper.helper_transforms import parse_lidarData, create_projection_matrix
+from airsimcollect.helper.helper_transforms import parse_lidarData, create_projection_matrix, get_colors_from_image, colors2class
 from airsimcollect.helper.o3d_util import get_extrinsics, set_view
 from airsimcollect.helper.helper import get_airsim_settings_file, AIR_SIM_SETTINGS
 
@@ -56,26 +56,23 @@ def create_homogenous_transform(cam_pos=lidar_to_camera_pos, cam_quat=lidar_to_c
 
 def project_points_img(points, proj_mat, width, height, points_orig):
     pixels = proj_mat.dot(points)
-    pixels = np.divide(pixels[:2, :], pixels[2, :]).transpose().astype(np.int)
+    pixels = np.divide(pixels[:2, :], pixels[2, :]).transpose()
+    pixels = np.rint(pixels).astype(np.int)
 
     # Remove pixels that are outside the image
-    mask_x = (pixels[:, 0] < width) & (pixels[:, 0] > 0)
-    mask_y = (pixels[:, 1] < height) & (pixels[:, 1] > 0)
+    mask_x = (pixels[:, 0] < width) & (pixels[:, 0] >= 0)
+    mask_y = (pixels[:, 1] < height) & (pixels[:, 1] >= 0)
     mask = mask_x & mask_y
     # Return the pixels and points that are inside the image
     pixels = pixels[mask]
     points_orig = points_orig[mask, :]
     return pixels, points_orig, mask
 
-
-def classify_points(img_meta, points, airsim_settings):
-
+def get_transforms(img_meta, airsim_settings):
     cam_ori = img_meta['rotation']
     cam_quat = np.quaternion(cam_ori.w_val, cam_ori.x_val,
                              cam_ori.y_val, cam_ori.z_val)
     cam_pos = img_meta['position']
-    height = img_meta['height']
-    width = img_meta['width']
     if airsim_settings['lidar_local_frame']:
         transform_pos = airsim_settings['lidar_to_camera_pos']
         transform_rot = airsim_settings['lidar_to_camera_quat']
@@ -85,6 +82,13 @@ def classify_points(img_meta, points, airsim_settings):
         transform_rot = airsim_settings['lidar_to_camera_quat'] * \
             cam_quat.conjugate()
         invert = True
+    
+    return transform_pos, transform_rot, invert
+
+def classify_points(img, points, img_meta, airsim_settings):
+    height = img_meta['height']
+    width = img_meta['width']
+    transform_pos, transform_rot, invert = get_transforms(img_meta, airsim_settings)
 
     proj_mat = create_projection_matrix(height, width)
     # Transform NED points to camera coordinate system (not NED)
@@ -94,7 +98,13 @@ def classify_points(img_meta, points, airsim_settings):
     pixels, points, mask = project_points_img(
         points_transformed, proj_mat, width, height, points)
 
-    return pixels, points_transformed, mask
+    colors = get_colors_from_image(pixels, img)
+    if len(img.shape) > 2:
+        # converts colors to numbered class
+        colors = colors2class(colors, airsim_settings['seg2rgb_map'])
+
+
+    return colors, mask, pixels
 
 
 def set_up_aisim():
@@ -164,20 +174,26 @@ def main():
     while True:
         if time.time() - prev_time > wait_time:
             points, pose_lidar = get_lidar_data(client)
+            if points.size < 10:
+                continue
             img, img_meta = get_image_data(client)
-            points = points[~np.isnan(points).any(axis=1)]
-            pixels, points_transformed, mask = classify_points(
-                img_meta, points, airsim_settings)
+            # points = points[~np.isnan(points).any(axis=1)]
+            colors, mask, pixels = classify_points(
+                img, points, img_meta, airsim_settings)
             img[pixels[:, 1], pixels[:, 0]] = [0, 255, 0]
-            plt.imshow(img)
-            plt.show()
-            # points_transformed = points_transformed.transpose()[:, :3]
-            # print(points_transformed)
-            # pcd_camera.points = o3d.utility.Vector3dVector(points_transformed)
-            # pcd_camera.paint_uniform_color([1,0,0])
-            # wait_time = 10000
+            # plt.imshow(img)
+            # plt.show()
+            pcd_colors = np.zeros_like(points)
+            pcd_colors[mask, :] = AIR_SIM_SETTINGS['cmap_list'][colors, :3]
+
+            # o3d valid mask...
+            nan_mask = ~np.isnan(points).any(axis=1)
+            points = points[nan_mask,:]
+            pcd_colors = pcd_colors[nan_mask,:]
             pcd.points = o3d.utility.Vector3dVector(points)
+            pcd.colors = o3d.utility.Vector3dVector(pcd_colors)
             prev_time = time.time()
+            # wait_time = 1000
         vis.update_geometry(pcd)
         vis.poll_events()
         update_view(vis)

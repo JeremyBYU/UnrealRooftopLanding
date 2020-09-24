@@ -15,6 +15,8 @@ import quaternion
 from airsim.types import ImageType, Quaternionr, Vector3r
 from airsim.utils import to_quaternion
 
+from airsimcollect.helper.helper_transforms import get_seg2rgb_map
+
 logger = logging.getLogger("AirSimCapture")
 
 DIR_PATH = path.dirname(path.realpath(__file__))
@@ -133,6 +135,10 @@ def get_airsim_settings_file():
         d_quat = np.quaternion(d_quat.w_val, d_quat.x_val,
                                d_quat.y_val, d_quat.z_val)
         AIR_SIM_SETTINGS['lidar_to_camera_quat'] = lidar_to_camera_quat * d_quat
+
+    cmap_list, seg2rgb_map = get_seg2rgb_map()
+    AIR_SIM_SETTINGS['cmap_list'] = np.array(cmap_list)
+    AIR_SIM_SETTINGS['seg2rgb_map'] = seg2rgb_map
 
     return AIR_SIM_SETTINGS
 

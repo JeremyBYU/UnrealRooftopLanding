@@ -45,18 +45,18 @@
     {
       "type": "Segmentation",
       "compress": false,
-      "retain_data": false
+      "retain_data": true
     },
     {
       "type": "Lidar",
       "lidar_name": "0",
-      "segmented": false,
+      "segmented": true,
       "retain_data": false
     }
   ],
-  "collection_points": "assets/rooftop/collectionpoints/lidar_collection_points.npy",
-  "collection_point_names": "assets/rooftop/collectionpoints/lidar_collection_points.json",
+  "collection_points": "assets/collectionpoints/collection_points_lidar_landing.npy",
+  "collection_point_names": "assets/collectionpoints/collection_points_lidar_landing.json",
   "color_codes": "assets/data/segmentation_colors.txt",
-  "min_elapsed_time": 1.0,
+  "min_elapsed_time": 0.25,
   "start_offset_unreal": [1490, -1120, 2590]
 }

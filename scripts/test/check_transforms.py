@@ -35,11 +35,12 @@ def get_lidar_data(client: airsim.MultirotorClient):
     return points, pose
 
 
-def get_image_data(client: airsim.MultirotorClient, channels=3):
+def get_image_data(client: airsim.MultirotorClient, compress=True):
     responses = client.simGetImages([airsim.ImageRequest(
         "0", airsim.ImageType.Segmentation, False, False)])
     response: ImageResponse = responses[0]
     img1d = np.fromstring(response.image_data_uint8, dtype=np.uint8)
+    channels = 4 if compress else 3
     img_rgba = img1d.reshape((response.height, response.width, channels))
     # airsim is actually bgr!!
     img_rgba[:, :, [0, 2]] = img_rgba[:, :, [2, 0]]

@@ -87,7 +87,7 @@ def random_points_within(poly, num_points):
     return points
 
 
-def genereate_radii(feature, radius_min=0.0, num_spheres=1, radius_delta=200.0):
+def genereate_radii(feature, radius_min=0.0, radius_increase=0.0, num_spheres=1, radius_delta=200.0):
     """Generates a list of radii for collection spheres
 
     Arguments:
@@ -106,10 +106,12 @@ def genereate_radii(feature, radius_min=0.0, num_spheres=1, radius_delta=200.0):
     geom = feature['geometry']
     if geom.geom_type == 'Point' or geom.geom_type == 'LineString':
         radius_min_ = radius_min_default_point if radius_min == 0.0 else radius_min
+        radius_min_ += radius_increase
     else:
         minx, miny, maxx, maxy = geom.bounds
         radius_geom = max(maxx - minx, maxy - miny) / 2.0
-        radius_min_ = radius_geom if radius_min == 0.0 else radius_min + radius_geom
+        radius_min_ = radius_geom if radius_min == 0.0 else radius_min
+        radius_min_ += radius_increase
     return [radius_min_ + radius_delta * i for i in range(num_spheres)]
 
 
@@ -179,9 +181,11 @@ def cli():
 @click.option('-ns', '--num-spheres', type=int, default=1,
               help='Number of collection spheres to generate and sample from.')
 @click.option('-rm', '--radius-min', type=float, default=0.0,
-              help="Minimum radius of collection sphere (distance from the focus point). " +
+              help="Fixed minimum radius of collection sphere (distance from the focus point). " +
               "If 0 and map feature is a polygon, will use smallest sized circle to circumscribe polygon. " +
               "If 0 and map feature is a point, set to 500.")
+@click.option('-ri', '--radius-increase', type=float, default=0.0,
+              help="Increase (bias) from minimum radius of collection sphere (distance from the focus point). ")
 @click.option('-rd', '--radius-delta', type=float, default=500.0,
               help='Change in growing collection sphere radius. Only applicable for -ns > 1.')
 @click.option('-fp', '--focus-point', type=click.Choice(['pia', 'centroid', 'random']), default='centroid',
@@ -201,10 +205,15 @@ def cli():
               "in the map. Set this flag to ignore this check.")
 @click.option('-pp', '--plot-points', is_flag=True,
               help="Whether to plot points for viewing. Debug only.")
-def generate(map_path, pitch_range, pitch_delta, yaw_range, yaw_delta, height_offset, num_spheres, radius_min, radius_delta,
-             focus_point, num_focus_points, record_feature_name, out, append_out, seed, ignore_collision, plot_points):
-    logger.debug("{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}".format(
-        map_path, pitch_range, pitch_delta, yaw_delta, num_spheres, radius_min, radius_delta, focus_point,
+@click.option('-d', '--debug', is_flag=True,
+              help="Whether to print debug statements")
+def generate(map_path, pitch_range, pitch_delta, yaw_range, yaw_delta, height_offset, num_spheres, radius_min, radius_increase, radius_delta,
+             focus_point, num_focus_points, record_feature_name, out, append_out, seed, ignore_collision, plot_points, debug):
+
+    if debug:
+        logger.setLevel(logging.DEBUG)
+    logger.debug("{}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}".format(
+        map_path, pitch_range, pitch_delta, yaw_delta, num_spheres, radius_min, radius_increase, radius_delta, focus_point,
         num_focus_points, ignore_collision, out, seed, plot_points))
 
     click.secho("Generating collection points...")
@@ -220,14 +229,15 @@ def generate(map_path, pitch_range, pitch_delta, yaw_range, yaw_delta, height_of
     all_points = []
     all_feature_names = []
     for feature in features:
+        logger.debug("Inspecting feature: %s", feature)
         focus_points = generate_focus_points(feature, focus_point, num_focus_points, height_offset=height_offset)
-        radii = genereate_radii(feature, radius_min, num_spheres, radius_delta)
-
+        radii = genereate_radii(feature, radius_min, radius_increase, num_spheres, radius_delta)
         for focus_point_ in focus_points:
+            logger.debug("At focus point: %s", focus_point_)
             for radius in radii:
                 collection_points = sample_sphere(focus_point_, radius, pitch_range,
                                                   pitch_delta, yaw_range, yaw_delta)
-
+                logger.debug("At radius level: %s", radius)
                 if not ignore_collision:
                     prev_shape = collection_points.shape
                     collection_points = remove_collision(collection_points, collisions)
@@ -238,7 +248,7 @@ def generate(map_path, pitch_range, pitch_delta, yaw_range, yaw_delta, height_of
                 if record_feature_name:
                     all_feature_names.extend([feature['properties'][record_feature_name]] * collection_points.shape[0])
                 if plot_points:
-                    plot_collection_points(collection_points, focus_point_, radius)
+                    plot_collection_points(collection_points, focus_point_, radius, feature)
 
     all_points = np.vstack(all_points)
     click.echo(

@@ -195,13 +195,48 @@ def import_world(json_fname):
     return feature_collection['features'], collisions
 
 
-def plot_collection_points(points, center, radius):
+def set_axes_equal(ax):
+    '''Make axes of 3D plot have equal scale so that spheres appear as spheres,
+    cubes as cubes, etc..  This is one possible solution to Matplotlib's
+    ax.set_aspect('equal') and ax.axis('equal') not working for 3D.
+
+    Input
+      ax: a matplotlib axis, e.g., as output from plt.gca().
+    '''
+
+    x_limits = ax.get_xlim3d()
+    y_limits = ax.get_ylim3d()
+    z_limits = ax.get_zlim3d()
+
+    x_range = abs(x_limits[1] - x_limits[0])
+    x_middle = np.mean(x_limits)
+    y_range = abs(y_limits[1] - y_limits[0])
+    y_middle = np.mean(y_limits)
+    z_range = abs(z_limits[1] - z_limits[0])
+    z_middle = np.mean(z_limits)
+
+    # The plot bounding box is a sphere in the sense of the infinity
+    # norm, hence I call half the max range the plot radius.
+    plot_radius = 0.5*max([x_range, y_range, z_range])
+
+    ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+    ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+    ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius])
+
+    ax.set_box_aspect([1,1,1])
+
+def plot_collection_points(points, center, radius, feature=None):
     fig, ax = plt.subplots(
-        1, 1, subplot_kw={'projection': '3d', 'aspect': 'auto'})
+        1, 1, subplot_kw={'projection': '3d'})
     # Plot points
     uvw = center - points[:, :3]
     ax.quiver(points[:, 0], points[:, 1],
               points[:, 2], *uvw.T, length=0.25)
+
+
+    if feature is not None:
+        coords = np.array(feature['geometry'].exterior) # get exterior
+        ax.plot3D(coords[:, 0], coords[:,1], coords[:, 2], 'red')
 
     # generate wire mesh for sphere
     phi = np.linspace(0, np.pi, 20)
@@ -213,6 +248,7 @@ def plot_collection_points(points, center, radius):
     ax.set_xlabel('X axis')
     ax.set_ylabel('Y axis')
     ax.set_zlabel('Z axis')
+    set_axes_equal(ax)
     plt.show()
 
 

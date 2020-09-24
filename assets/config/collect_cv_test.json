@@ -40,7 +40,7 @@
   ],
   "collectors": [
   ],
-  "collection_points": "assets/rooftop/collectionpoints/collection_points_cv_test.npy",
+  "collection_points": "assets/collectionpoints/collection_points_cv_test.npy",
   "color_codes": "assets/data/segmentation_colors.txt",
   "min_elapsed_time": 0.5,
   "start_offset_unreal": [1490, -1120, 2590]

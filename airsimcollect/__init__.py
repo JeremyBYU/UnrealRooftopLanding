@@ -17,9 +17,9 @@ import airsim
 from airsim import Vector3r, Pose, to_quaternion, ImageRequest
 
 from airsimcollect.segmentation import set_all_to_zero, set_segmentation_ids
-from airsimcollect.helper.helper import update, image_meta_data_json
+from airsimcollect.helper.helper import update, image_meta_data_json, update_airsim_settings
 
-from airsimcollect.helper.helper_transforms import (parse_lidarData, create_projection_matrix,
+from airsimcollect.helper.helper_transforms import (parse_lidarData, create_projection_matrix, classify_points,
                                              transform_to_cam, project_points_img, get_colors_from_image, get_seg2rgb_map, colors2class)
 
 logger = logging.getLogger("AirSimCapture")
@@ -45,6 +45,7 @@ class AirSimCollect(object):
         self.color_codes = color_codes
         self.start_offset_unreal = start_offset_unreal
         self.bar = None if logger.getEffectiveLevel() == logging.DEBUG else bar
+        self.airsim_settings = update_airsim_settings()
 
         if self.collection_points is None or self.collectors is None:
             logger.error(
@@ -116,13 +117,14 @@ class AirSimCollect(object):
                 logger.debug("Collision at point %r, skipping..", pos)
                 continue
 
+            elapsed = time.time() - t0
+            if elapsed < self.min_elapsed_time:
+                time.sleep(self.min_elapsed_time - elapsed)
+
             if self.collect_data:
                 record = self.collect_data_at_point(pos, rot)
                 records.append(record)
 
-            elapsed = time.time() - t0
-            if elapsed < self.min_elapsed_time:
-                time.sleep(self.min_elapsed_time - elapsed)
 
             logger.debug("Time Elapsed: %.2f", elapsed)
 
@@ -168,7 +170,7 @@ class AirSimCollect(object):
                         response.image_data_uint8, dtype=np.uint8)
                     # TODO shape should be tuple
                     img_rgba = img1d.reshape(
-                        response.height, response.width, 4)
+                        response.height, response.width, 3)
                     img = Image.fromarray(img_rgba)
                     img.save(file_path, "PNG")
                 # logger.("Image Global ID: %d, Type %d, size %d, pos %s", global_id, response.image_type,
@@ -189,6 +191,8 @@ class AirSimCollect(object):
             logger.debug("No lidar points received")
             return
         points = parse_lidarData(lidar_data)
+        if points.size < 10:
+            logger.warn("Missing lidar data")
         # Project points into segmentation image if available
         if collector['segmented']:
             if img_meta is None:
@@ -201,22 +205,25 @@ class AirSimCollect(object):
             cam_pos = img_meta['position']
             height = img_meta['height']
             width = img_meta['width']
-            proj_mat = create_projection_matrix(height, width)
-            # Transform NED points to camera coordinate system (not NED)
-            points_transformed = transform_to_cam(
-                points, cam_pos, cam_ori, points_in_unreal=False)
-            # Project Points into image, filter points outside of image
-            pixels, points = project_points_img(
-                points_transformed, proj_mat, width, height, points)
-            # Ensure we have valid points
-            if points.shape[0] < 1:
-                logger.warn("No points for lidar in segmented image")
-                return
-            color = get_colors_from_image(
-                pixels, img_meta['data'], normalize=False)
-            # converts colors to numbered class
-            color = colors2class(color, self.seg2rgb_map)
-            points = np.column_stack((points, color))
+
+            point_classes, _, _ = classify_points(img_meta['data'], points, img_meta, self.airsim_settings)
+
+            # proj_mat = create_projection_matrix(height, width)
+            # # Transform NED points to camera coordinate system (not NED)
+            # points_transformed = transform_to_cam(
+            #     points, cam_pos, cam_ori, points_in_unreal=False)
+            # # Project Points into image, filter points outside of image
+            # pixels, points = project_points_img(
+            #     points_transformed, proj_mat, width, height, points)
+            # # Ensure we have valid points
+            # if points.shape[0] < 1:
+            #     logger.warn("No points for lidar in segmented image")
+            #     return
+            # color = get_colors_from_image(
+            #     pixels, img_meta['data'], normalize=False)
+            # # converts colors to numbered class
+            # color = colors2class(color, self.seg2rgb_map)
+            points = np.column_stack((points, point_classes))
 
         # Save point data as numpy
         if collector['save_as'] == 'numpy':

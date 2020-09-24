@@ -36,7 +36,7 @@ First we need to generate "Collection Points" for where the drone will be. To re
 Run `poi generate` for polygons and line data to create the Computer Vision Training Set
 
 1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_cv_train.npy -ns 2`
-2. `poi generate -m assets/maps/poi-line.geojson -o assets/collectionpoints/collection_points_cv_train.npy -nf 100 -yd 90 -pr 45 45 -pd 0 -rm 100 -ao`
+2. `poi generate -m assets/maps/poi-line.geojson -o assets/collectionpoints/collection_points_cv_train.npy -nf 100 -yd 90 -pr 45 45 -pd 0 -ri 100 -ao`
 
 Note that (2) doesn't overwrite the file, but will append to it (`-ao` flag).
 
@@ -44,7 +44,7 @@ Note that (2) doesn't overwrite the file, but will append to it (`-ao` flag).
 
 ~2000 images for RandomWorldSeed3 and RandomManhattanDistribution each. Pitch range is offset by 5. Basically not only is the data different but it captured at different angles.  Probably overkill but still.
 
-1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_cv_test.npy -rm 500 -pr 35 80 -yd 45`
+1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_cv_test.npy -ri 500 -pr 35 80 -yd 45`
 
 
 #### Rooftop Landing Collection Points

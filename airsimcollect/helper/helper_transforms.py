@@ -1,6 +1,7 @@
 from airsim.types import Quaternionr, Vector3r
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import airsim
 import quaternion
 import numpy as np
 import logging
@@ -125,6 +126,24 @@ def classify_points(img, points, img_meta, airsim_settings):
 
     return all_colors, mask, pixels
 
+
+def get_image_data(client: airsim.MultirotorClient, compress=True):
+    responses = client.simGetImages([airsim.ImageRequest(
+        "0", airsim.ImageType.Segmentation, False, compress)])
+    response: ImageResponse = responses[0]
+    img1d = np.fromstring(response.image_data_uint8, dtype=np.uint8)
+    channels = 4 if compress else 3
+    img_rgba = img1d.reshape((response.height, response.width, channels))
+    # airsim is actually bgr!!
+    img_rgba[:, :, [0, 2]] = img_rgba[:, :, [2, 0]]
+
+    img_meta = dict()
+    img_meta['rotation'] = response.camera_orientation
+    img_meta['position'] = response.camera_position
+    img_meta['width'] = response.width
+    img_meta['height'] = response.height
+
+    return img_rgba, img_meta
 
 def parse_lidarData(data):
     # reshape array of floats to array of [X,Y,Z]

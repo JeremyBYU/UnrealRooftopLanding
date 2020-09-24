@@ -8,7 +8,7 @@ from airsim.types import ImageResponse, ImageRequest, Quaternionr, Vector3r
 import matplotlib.pyplot as plt
 import quaternion
 
-from airsimcollect.helper.helper_transforms import parse_lidarData, classify_points
+from airsimcollect.helper.helper_transforms import parse_lidarData, classify_points, get_image_data
 from airsimcollect.helper.o3d_util import get_extrinsics, set_view
 from airsimcollect.helper.helper import update_airsim_settings, AIR_SIM_SETTINGS
 
@@ -34,24 +34,6 @@ def get_lidar_data(client: airsim.MultirotorClient):
     pose = data.pose
     return points, pose
 
-
-def get_image_data(client: airsim.MultirotorClient, compress=True):
-    responses = client.simGetImages([airsim.ImageRequest(
-        "0", airsim.ImageType.Segmentation, False, False)])
-    response: ImageResponse = responses[0]
-    img1d = np.fromstring(response.image_data_uint8, dtype=np.uint8)
-    channels = 4 if compress else 3
-    img_rgba = img1d.reshape((response.height, response.width, channels))
-    # airsim is actually bgr!!
-    img_rgba[:, :, [0, 2]] = img_rgba[:, :, [2, 0]]
-
-    img_meta = dict()
-    img_meta['rotation'] = response.camera_orientation
-    img_meta['position'] = response.camera_position
-    img_meta['width'] = response.width
-    img_meta['height'] = response.height
-
-    return img_rgba, img_meta
 
 
 def update_view(vis):
@@ -82,7 +64,7 @@ def main():
             points, pose_lidar = get_lidar_data(client)
             if points.size < 10:
                 continue
-            img, img_meta = get_image_data(client)
+            img, img_meta = get_image_data(client, compress=False)
             # points = points[~np.isnan(points).any(axis=1)]
             colors, mask, pixels = classify_points(
                 img, points, img_meta, airsim_settings)

@@ -99,7 +99,7 @@ def get_planar_point_density(opc, ds: int = 2, bucket_size=0.5, z_col=2,
 
 
 def map_pd_to_decimate_kernel(point_density: float):
-    if point_density < 30:
+    if point_density < 35:
         return 1
     elif point_density < 70:
         return 2

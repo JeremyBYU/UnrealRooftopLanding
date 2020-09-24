@@ -37,7 +37,7 @@ def translate_meshes(meshes, shift_x=True):
     y_amt_ = 0
     for i, mesh in enumerate(meshes):
         x_amt, y_amt, z_amt = mesh.get_axis_aligned_bounding_box().get_extent()
-        if shift_x:
+        if not shift_x:
             x_amt = 0.0
         else:
             y_amt = 0.0

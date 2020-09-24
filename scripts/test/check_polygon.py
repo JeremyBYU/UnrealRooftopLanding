@@ -31,7 +31,7 @@ def set_up_aisim():
 
     client.armDisarm(True)
     print("Taking off!")
-    client.takeoffAsync().join()
+    client.takeoffAsync(timeout_sec=3).join()
     print("Increasing altitude 10 meters!")
     client.moveToZAsync(-10, 2).join()
     print("Reached Altitude, launching Lidar Visualizer")
@@ -69,7 +69,7 @@ def main():
     axis = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.5)
 
     vis = o3d.visualization.Visualizer()
-    vis.create_window()
+    vis.create_window(width=1280, height=720)
     vis.add_geometry(pcd)
     vis.add_geometry(mesh_smooth)
     vis.add_geometry(axis)
@@ -79,7 +79,7 @@ def main():
     ga = GaussianAccumulatorS2(level=config['fastga']['level'])
     ico = IcoCharts(level=config['fastga']['level'])
 
-    path = [airsim.Vector3r(0, 0, -5), airsim.Vector3r(0, 0, -10)] * 20
+    path = [airsim.Vector3r(0, 0, -5), airsim.Vector3r(0, 0, -10)] * 10
     client.moveOnPathAsync(path, 2, 60)
 
     prev_time = time.time()
@@ -116,7 +116,7 @@ def main():
                 all_polys = handle_shapes(vis, planes, obstacles, all_polys) # 100 ms to plot.... wish we had opengl line-width control
                 # print(planes)
                 # update the open3d geometries
-                update_point_cloud(pcd, points)
+                # update_point_cloud(pcd, points)
                 update_open_3d_mesh_from_tri_mesh(mesh_smooth, tri_mesh)
                 translate_meshes([mesh_smooth, pcd])
                 prev_time = time.time()

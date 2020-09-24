@@ -51,7 +51,9 @@ Note that (2) doesn't overwrite the file, but will append to it (`-ao` flag).
 
 This generated collection points for Rooftop LIDAR collection. Much smaller collection. Used for testing actual landing site selection. 
 
-1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -rm 1000 -pr 75 75 -pd 0 -yd 90 -rfn class_label`
+1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -ri 1000 -pr 75 75 -pd 0 -yd 90 -rfn class_label`
+
+Proposed- `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -ri -500 -sc circle -yd 90 -rfn class_label`
 
 ### Generate Images from AirSim
 
@@ -143,3 +145,46 @@ LiDAR Sensor Settings:
   * polylidar, jetson, predicted, 0, Building1, 20ms, N/A, N/A
   * polylabel, laptop, predicted, 0, Building1, 20ms, UK, [point,radius]
   * polylabel, laptop, groundtruth, 0, Building1, 20ms, UK, [point,radius]
+
+
+  ```
+{
+	"class_name" : "ViewTrajectory",
+	"interval" : 29,
+	"is_loop" : false,
+	"trajectory" : 
+	[
+		{
+			"boundingbox_max" : [ 46.592327117919922, 47.800155639648438, 24.875473022460938 ],
+			"boundingbox_min" : [ -45.977882385253906, -59.884254455566406, -13.06738160405574 ],
+			"field_of_view" : 59.999999999999993,
+			"front" : [ 0.013683577996376688, -0.32966681771908396, -0.94399817213180537 ],
+			"lookat" : [ 2.5488070936335969, -8.1752193707871861, 6.6814923975724128 ],
+			"up" : [ 0.0051760193170947164, 0.94409726625824619, -0.32962639558708806 ],
+			"zoom" : 0.30142939629576992
+		}
+	],
+	"version_major" : 1,
+	"version_minor" : 0
+}
+
+{
+	"class_name" : "ViewTrajectory",
+	"interval" : 29,
+	"is_loop" : false,
+	"trajectory" : 
+	[
+		{
+			"boundingbox_max" : [ 8.4127435684204102, 5.8720441335277966, 0.63159967445807108 ],
+			"boundingbox_min" : [ -8.211085319519043, -5.8716968618454288, -2.5818006992340088 ],
+			"field_of_view" : 59.999999999999993,
+			"front" : [ -0.23736820253299898, 0.01738649469363451, -0.97126414853453824 ],
+			"lookat" : [ -0.4090289712471753, -1.0071293015254705, -0.86852741102983266 ],
+			"up" : [ 0.97141962599464171, 0.003737243918986703, -0.23733929982268123 ],
+			"zoom" : 0.57129903937538118
+		}
+	],
+	"version_major" : 1,
+	"version_minor" : 0
+}
+  ```

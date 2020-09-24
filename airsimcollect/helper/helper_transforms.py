@@ -9,6 +9,7 @@ import json
 import warnings
 import time
 
+
 # ignore quaternions warning about numba not being installed
 # ignore vispy warning about matplotlib 2.2+ issues
 warnings.simplefilter("ignore")
@@ -23,6 +24,106 @@ TOLERANCE = 0.01
 
 
 REGEX_CATCH_ALL = "[\w*. ]*"
+
+lidar_to_camera_quat = np.quaternion(0.5, -0.5, -0.5, -0.5)
+# Default no offset
+lidar_to_camera_pos = Vector3r(x_val=0.0, y_val=0.0, z_val=0.0)
+
+
+def transform_to_cam(points, cam_pos=lidar_to_camera_pos, cam_quat=lidar_to_camera_quat, invert=False, points_in_unreal=False):
+    temp = points.copy()
+    points = np.ones(shape=(4, points.shape[0]))
+    points[:3, :] = temp.transpose()
+
+    if points_in_unreal:
+        # Need to scale down to meters
+        points[:3, :] = points[:3, :] / 100.0
+        # Need to convert to NED coordinate for homogoneous transformation matrix
+        temp = points.copy()
+        points[0, :], points[1, :], points[2,
+                                           :] = temp[0, :], temp[1, :], -temp[2, :]
+
+    # Points are in NED, wide form
+    # Now transform them
+    hom_transform = create_homogenous_transform(
+        cam_pos, cam_quat, invert=invert)
+
+    point_cam_ned = hom_transform.dot(points)
+    point_cam_hom = point_cam_ned.copy()
+    # Ha, so that was where I was fixing the camera coordinates, not needed anymore
+    # point_cam_hom[0, :], point_cam_hom[1, :], point_cam_hom[2,
+    #                                                         :] = point_cam_ned[1, :], point_cam_ned[2, :], point_cam_ned[0, :]
+    return point_cam_hom
+
+
+def create_homogenous_transform(cam_pos=lidar_to_camera_pos, cam_quat=lidar_to_camera_quat, invert=False):
+    cam_pos = np.array([cam_pos.x_val, cam_pos.y_val, cam_pos.z_val])
+    rot_mat = quaternion.as_rotation_matrix(cam_quat)
+
+    hom_tran = np.zeros(shape=(4, 4))
+    hom_tran[:3, :3] = rot_mat
+    hom_tran[:3, 3] = -1 * rot_mat.dot(cam_pos) if invert else cam_pos
+    hom_tran[3, 3] = 1
+
+    return hom_tran
+
+
+def project_points_img(points, proj_mat, width, height, points_orig):
+    pixels = proj_mat.dot(points)
+    pixels = np.divide(pixels[:2, :], pixels[2, :]).transpose()
+    pixels = np.rint(pixels).astype(np.int)
+
+    # Remove pixels that are outside the image
+    mask_x = (pixels[:, 0] < width) & (pixels[:, 0] >= 0)
+    mask_y = (pixels[:, 1] < height) & (pixels[:, 1] >= 0)
+    mask = mask_x & mask_y
+    # Return the pixels and points that are inside the image
+    pixels = pixels[mask]
+    return pixels, mask
+
+
+def get_transforms(img_meta, airsim_settings):
+    cam_ori = img_meta['rotation']
+    cam_quat = np.quaternion(cam_ori.w_val, cam_ori.x_val,
+                             cam_ori.y_val, cam_ori.z_val)
+    cam_pos = img_meta['position']
+    if airsim_settings['lidar_local_frame']:
+        transform_pos = airsim_settings['lidar_to_camera_pos']
+        transform_rot = airsim_settings['lidar_to_camera_quat']
+        invert = False
+    else:
+        transform_pos = cam_pos
+        transform_rot = airsim_settings['lidar_to_camera_quat'] * \
+            cam_quat.conjugate()
+        invert = True
+
+    return transform_pos, transform_rot, invert
+
+
+def classify_points(img, points, img_meta, airsim_settings):
+    height = img_meta['height']
+    width = img_meta['width']
+    transform_pos, transform_rot, invert = get_transforms(
+        img_meta, airsim_settings)
+
+    proj_mat = create_projection_matrix(height, width)
+    # Transform NED points to camera coordinate system (not NED)
+    points_transformed = transform_to_cam(
+        points, cam_pos=transform_pos, cam_quat=transform_rot, invert=invert, points_in_unreal=False)
+    # Project Points into image, filter points outside of image
+    pixels, mask = project_points_img(
+        points_transformed, proj_mat, width, height, points)
+
+    colors = get_colors_from_image(pixels, img)
+    if len(img.shape) > 2:
+        # converts colors to numbered class
+        colors = colors2class(colors, airsim_settings['seg2rgb_map'])
+
+    # 255 means nan point or pont outside of image
+    all_colors = np.ones((points.shape[0], ), dtype=np.uint8) * 255
+    all_colors[mask] = colors
+
+    return all_colors, mask, pixels
 
 
 def parse_lidarData(data):
@@ -101,35 +202,35 @@ def project_ned_points(points, img_meta):
     return pixels
 
 
-def classify_points(points, img_meta, img, seg2rgb_map):
-    # Transform and project point cloud into segmentation image
-    cam_ori = img_meta['rotation']
-    cam_pos = img_meta['position']
-    height = img_meta['height']
-    width = img_meta['width']
-    proj_mat = create_projection_matrix(height, width)
-    # Transform NED points to camera coordinate system (not NED)
-    points_transformed = transform_to_cam(
-        points, cam_pos, cam_ori, points_in_unreal=False)
-    # Project Points into image, filter points outside of image
-    pixels, points = project_points_img(
-        points_transformed, proj_mat, width, height, points)
+# def classify_points(points, img_meta, img, seg2rgb_map):
+#     # Transform and project point cloud into segmentation image
+#     cam_ori = img_meta['rotation']
+#     cam_pos = img_meta['position']
+#     height = img_meta['height']
+#     width = img_meta['width']
+#     proj_mat = create_projection_matrix(height, width)
+#     # Transform NED points to camera coordinate system (not NED)
+#     points_transformed = transform_to_cam(
+#         points, cam_pos, cam_ori, points_in_unreal=False)
+#     # Project Points into image, filter points outside of image
+#     pixels, points = project_points_img(
+#         points_transformed, proj_mat, width, height, points)
 
-    # Ensure we have valid points
-    if points.shape[0] < 1:
-        print("No points for lidar in segmented image")
-        return None
-    # Check if we have an RGBA image or just a 2D numpy array of classes
-    remove_time = 0
-    color = get_colors_from_image(pixels, img, normalize=False)
-    if len(img.shape) > 2:
-        # converts colors to numbered class
-        t1 = time.time()
-        color = colors2class(color, seg2rgb_map)
-        remove_time = (time.time() - t1) * 1000
+#     # Ensure we have valid points
+#     if points.shape[0] < 1:
+#         print("No points for lidar in segmented image")
+#         return None
+#     # Check if we have an RGBA image or just a 2D numpy array of classes
+#     remove_time = 0
+#     color = get_colors_from_image(pixels, img, normalize=False)
+#     if len(img.shape) > 2:
+#         # converts colors to numbered class
+#         t1 = time.time()
+#         color = colors2class(color, seg2rgb_map)
+#         remove_time = (time.time() - t1) * 1000
 
-    points = np.column_stack((points, color))
-    return points, remove_time
+#     points = np.column_stack((points, color))
+#     return points, remove_time
 
 
 def create_cmap(cmap_list):
@@ -156,61 +257,61 @@ def map_colors(values, cmap, norm):
     return cmap(norm(values))
 
 
-def transform_to_cam(points, cam_pos, cam_ori, points_in_unreal=False):
-    temp = points.copy()
-    points = np.ones(shape=(4, points.shape[0]))
-    points[:3, :] = temp.transpose()
+# def transform_to_cam(points, cam_pos, cam_ori, points_in_unreal=False):
+#     temp = points.copy()
+#     points = np.ones(shape=(4, points.shape[0]))
+#     points[:3, :] = temp.transpose()
 
-    if points_in_unreal:
-        # Need to scale down to meters
-        points[:3, :] = points[:3, :] / 100.0
-        # Need to convert to NED coordinate for homogoneous transformation matrix
-        temp = points.copy()
-        points[0, :], points[1, :], points[2,
-                                           :] = temp[0, :], temp[1, :], -temp[2, :]
+#     if points_in_unreal:
+#         # Need to scale down to meters
+#         points[:3, :] = points[:3, :] / 100.0
+#         # Need to convert to NED coordinate for homogoneous transformation matrix
+#         temp = points.copy()
+#         points[0, :], points[1, :], points[2,
+#                                            :] = temp[0, :], temp[1, :], -temp[2, :]
 
-    # Points are in NED, wide form
-    # Now transform them
-    hom_transform = create_homogenous_transform(cam_pos, cam_ori)
+#     # Points are in NED, wide form
+#     # Now transform them
+#     hom_transform = create_homogenous_transform(cam_pos, cam_ori)
 
-    point_cam_ned = hom_transform.dot(points)
-    # print(point_cam_ned)
-    point_cam_hom = point_cam_ned.copy()
-    point_cam_hom[0, :], point_cam_hom[1, :], point_cam_hom[2,
-                                                            :] = point_cam_ned[1, :], point_cam_ned[2, :], point_cam_ned[0, :]
-    # print(point_cam_hom)
-    return point_cam_hom
-
-
-def project_points_img(points, proj_mat, width, height, points_orig):
-    pixels = proj_mat.dot(points)
-    pixels = np.divide(pixels[:2, :], pixels[2, :]).transpose().astype(np.int)
-
-    # Remove pixels that are outside the image
-    mask_x = (pixels[:, 0] < width) & (pixels[:, 0] > 0)
-    mask_y = (pixels[:, 1] < height) & (pixels[:, 1] > 0)
-
-    # Return the pixels and points that are inside the image
-    pixels = pixels[mask_x & mask_y]
-    points_orig = points_orig[mask_x & mask_y, :]
-    return pixels, points_orig
+#     point_cam_ned = hom_transform.dot(points)
+#     # print(point_cam_ned)
+#     point_cam_hom = point_cam_ned.copy()
+#     point_cam_hom[0, :], point_cam_hom[1, :], point_cam_hom[2,
+#                                                             :] = point_cam_ned[1, :], point_cam_ned[2, :], point_cam_ned[0, :]
+#     # print(point_cam_hom)
+#     return point_cam_hom
 
 
-def create_homogenous_transform(cam_pos, rot, invert=True):
+# def project_points_img(points, proj_mat, width, height, points_orig):
+#     pixels = proj_mat.dot(points)
+#     pixels = np.divide(pixels[:2, :], pixels[2, :]).transpose().astype(np.int)
 
-    i_ = -1.0 if invert else 1.0
-    inv_rot_q = np.quaternion(
-        rot.w_val, i_ * rot.x_val, i_ * rot.y_val, i_ * rot.z_val)
-    cam_pos = np.array([cam_pos.x_val, cam_pos.y_val, cam_pos.z_val])
+#     # Remove pixels that are outside the image
+#     mask_x = (pixels[:, 0] < width) & (pixels[:, 0] > 0)
+#     mask_y = (pixels[:, 1] < height) & (pixels[:, 1] > 0)
 
-    inv_rot_mat = quaternion.as_rotation_matrix(inv_rot_q)
+#     # Return the pixels and points that are inside the image
+#     pixels = pixels[mask_x & mask_y]
+#     points_orig = points_orig[mask_x & mask_y, :]
+#     return pixels, points_orig
 
-    hom_tran = np.zeros(shape=(4, 4))
-    hom_tran[:3, :3] = inv_rot_mat
-    hom_tran[:3, 3] = -1 * inv_rot_mat.dot(cam_pos) if invert else cam_pos
-    hom_tran[3, 3] = 1
 
-    return hom_tran
+# def create_homogenous_transform(cam_pos, rot, invert=True):
+
+#     i_ = -1.0 if invert else 1.0
+#     inv_rot_q = np.quaternion(
+#         rot.w_val, i_ * rot.x_val, i_ * rot.y_val, i_ * rot.z_val)
+#     cam_pos = np.array([cam_pos.x_val, cam_pos.y_val, cam_pos.z_val])
+
+#     inv_rot_mat = quaternion.as_rotation_matrix(inv_rot_q)
+
+#     hom_tran = np.zeros(shape=(4, 4))
+#     hom_tran[:3, :3] = inv_rot_mat
+#     hom_tran[:3, 3] = -1 * inv_rot_mat.dot(cam_pos) if invert else cam_pos
+#     hom_tran[3, 3] = 1
+
+#     return hom_tran
 
 
 def get_colors_from_image(pixels, img, normalize=True):

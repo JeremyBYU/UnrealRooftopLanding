@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import yaml
 from airsim import ImageRequest, ImageResponse
 
-from airsimcollect.helper.helper import get_airsim_settings_file
+from airsimcollect.helper.helper import update_airsim_settings
 from airsimcollect.helper.helper_transforms import parse_lidarData
 from airsimcollect.helper.o3d_util import get_extrinsics, set_view, handle_shapes, update_point_cloud, translate_meshes
 from airsimcollect.helper.helper_mesh import (
@@ -75,7 +75,7 @@ def main():
     client = airsim.MultirotorClient()
     set_segmentation_ids(client, DEFAULT_REGEX_CODES)
 
-    air_sim_settings = get_airsim_settings_file()
+    air_sim_settings = update_airsim_settings()
     z_col = air_sim_settings['lidar_z_col']
 
     set_up_airsim(client)

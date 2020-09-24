@@ -84,7 +84,7 @@ AIR_SIM_SETTINGS['lidar_to_camera_pos'] = Vector3r(
     x_val=0.0, y_val=0.0, z_val=0.0)
 
 
-def get_airsim_settings_file():
+def update_airsim_settings():
     with open(WINDOWS_AIRSIM__SETTINGS_PATH_FULL) as fh:
         data = json.load(fh)
 

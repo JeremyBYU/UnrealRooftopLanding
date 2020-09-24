@@ -2,6 +2,7 @@ from os import path
 import logging
 import collections
 import json
+import sys
 
 from shapely.geometry import shape
 import geojson
@@ -12,13 +13,15 @@ from functools import reduce
 import quaternion
 
 from airsim.types import ImageType, Quaternionr, Vector3r
+from airsim.utils import to_quaternion
 
 logger = logging.getLogger("AirSimCapture")
 
 DIR_PATH = path.dirname(path.realpath(__file__))
 
 WINDOWS_AIRSIM_SETTINGS_PATH = '~/Documents/AirSim/settings.json'
-WINDOWS_AIRSIM__SETTINGS_PATH_FULL = path.expanduser(WINDOWS_AIRSIM_SETTINGS_PATH)
+WINDOWS_AIRSIM__SETTINGS_PATH_FULL = path.expanduser(
+    WINDOWS_AIRSIM_SETTINGS_PATH)
 
 DEFAULT_SEGMENTATION = {
     "sensor": "Image",
@@ -71,34 +74,17 @@ DEFAULT_CONFIG = {
 
 AIR_SIM_SETTINGS = dict()
 
-# Lidar frame is NED, need to transfrom to camera frame.
+# Lidar frame is NED (x-forward, y-right, z-down), need to transfrom to camera frame.
 AIR_SIM_SETTINGS['lidar_to_camera_quat'] = np.quaternion(0.5, -0.5, -0.5, -0.5)
 
 # Default no offset
-AIR_SIM_SETTINGS['lidar_to_camera_pos'] = Vector3r(x_val=0.0, y_val=0.0, z_val=0.0)
+AIR_SIM_SETTINGS['lidar_to_camera_pos'] = Vector3r(
+    x_val=0.0, y_val=0.0, z_val=0.0)
+
 
 def get_airsim_settings_file():
     with open(WINDOWS_AIRSIM__SETTINGS_PATH_FULL) as fh:
         data = json.load(fh)
-    
-    # Determine relative position offset between camera and lidar frame 
-    lidar_x = deep_get(data, 'Vehicles.Drone1.Sensors.0.X')
-    lidar_y = deep_get(data, 'Vehicles.Drone1.Sensors.0.Y')
-    lidar_z = deep_get(data, 'Vehicles.Drone1.Sensors.0.Z')
-
-    camera_x = deep_get(data, 'Vehicles.Drone1.Cameras.0.X')
-    camera_y = deep_get(data, 'Vehicles.Drone1.Cameras.0.Y')
-    camera_z = deep_get(data, 'Vehicles.Drone1.Cameras.0.Z')
-
-
-    if lidar_x is not None and camera_x is not None:
-        delta_pose:Vector3r = AIR_SIM_SETTINGS['lidar_to_camera_pos']
-        dx = lidar_x - camera_x
-        dy = lidar_y - camera_y
-        dz = lidar_z - camera_z
-        delta_pose.x_val = dy
-        delta_pose.y_val = -dx
-        delta_pose.z_val = dz
 
     # Determine if point cloud generated from lidar frame is in NED frame or local sensor frame
     # if in sensor local frame then the 'X' axis (0) hold the 'range' measurement when pointed straight down
@@ -109,11 +95,51 @@ def get_airsim_settings_file():
         AIR_SIM_SETTINGS['lidar_z_col'] = 0
         AIR_SIM_SETTINGS['lidar_local_frame'] = True
 
+    # Determine relative pose offset between camera and lidar frame
+    lidar_x = deep_get(data, 'Vehicles.Drone1.Sensors.0.X')
+    lidar_y = deep_get(data, 'Vehicles.Drone1.Sensors.0.Y')
+    lidar_z = deep_get(data, 'Vehicles.Drone1.Sensors.0.Z')
+
+    camera_x = deep_get(data, 'Vehicles.Drone1.Cameras.0.X')
+    camera_y = deep_get(data, 'Vehicles.Drone1.Cameras.0.Y')
+    camera_z = deep_get(data, 'Vehicles.Drone1.Cameras.0.Z')
+
+    lidar_roll = deep_get(data, 'Vehicles.Drone1.Sensors.0.Roll')
+    lidar_pitch = deep_get(data, 'Vehicles.Drone1.Sensors.0.Pitch')
+    lidar_yaw = deep_get(data, 'Vehicles.Drone1.Sensors.0.Yaw')
+
+    camera_roll = deep_get(data, 'Vehicles.Drone1.Cameras.0.Roll')
+    camera_pitch = deep_get(data, 'Vehicles.Drone1.Cameras.0.Pitch')
+    camera_yaw = deep_get(data, 'Vehicles.Drone1.Cameras.0.Yaw')
+
+    # get delta postion offset
+    if lidar_x is not None and camera_x is not None:
+        delta_pose: Vector3r = AIR_SIM_SETTINGS['lidar_to_camera_pos']
+        dx = lidar_x - camera_x
+        dy = lidar_y - camera_y
+        dz = lidar_z - camera_z
+        # these delta poses must be in the CAMERA frame
+        delta_pose.x_val = dy
+        delta_pose.y_val = -dx
+        delta_pose.z_val = dz
+    # get delta rotation, only need this if: 1. Lidar and Camera are not pointed in the same direction. 2: If point clouds are in lidar local frame.
+    if lidar_roll is not None and camera_roll is not None and AIR_SIM_SETTINGS['lidar_local_frame']:
+        lidar_to_camera_quat = AIR_SIM_SETTINGS['lidar_to_camera_quat']
+        d_roll = np.radians(lidar_roll - camera_roll)
+        d_pitch = np.radians(lidar_pitch - camera_pitch)
+        d_yaw = np.radians(lidar_yaw - camera_yaw)
+
+        d_quat: Quaternionr = to_quaternion(d_pitch, d_roll, d_yaw)
+        d_quat = np.quaternion(d_quat.w_val, d_quat.x_val,
+                               d_quat.y_val, d_quat.z_val)
+        AIR_SIM_SETTINGS['lidar_to_camera_quat'] = lidar_to_camera_quat * d_quat
+
     return AIR_SIM_SETTINGS
 
 
 def deep_get(dictionary, keys, default=None):
     return reduce(lambda d, key: d.get(key, default) if isinstance(d, dict) else default, keys.split("."), dictionary)
+
 
 def update(d, u):
     for k, v in u.items():
@@ -188,12 +214,12 @@ def image_meta_data_json(images_meta):
     img_meta_data = []
     for img_meta in images_meta:
         data = {
-                "camera_name": img_meta['camera_name'],
-                "position": dict(img_meta['position'].__dict__),
-                "rotation": dict(img_meta['rotation'].__dict__),
-                "height": img_meta["height"],
-                "width": img_meta["width"],
-                "type": img_meta['type']
-                }
+            "camera_name": img_meta['camera_name'],
+            "position": dict(img_meta['position'].__dict__),
+            "rotation": dict(img_meta['rotation'].__dict__),
+            "height": img_meta["height"],
+            "width": img_meta["width"],
+            "type": img_meta['type']
+        }
         img_meta_data.append(data)
     return img_meta_data

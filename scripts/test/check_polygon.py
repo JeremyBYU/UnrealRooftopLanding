@@ -16,7 +16,7 @@ from airsimcollect.helper.helper_mesh import (
 from airsimcollect.helper.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 
 
-from fastga import GaussianAccumulatorS2, IcoCharts
+from fastga import GaussianAccumulatorS2Beta, IcoCharts
 
 from polylidar import MatrixDouble, extract_tri_mesh_from_organized_point_cloud, HalfEdgeTriangulation, Polylidar3D
 
@@ -76,7 +76,7 @@ def main():
     all_polys = []
 
     pl = Polylidar3D(**config['polylidar'])
-    ga = GaussianAccumulatorS2(level=config['fastga']['level'])
+    ga = GaussianAccumulatorS2Beta(level=config['fastga']['level'])
     ico = IcoCharts(level=config['fastga']['level'])
 
     path = [airsim.Vector3r(0, 0, -5), airsim.Vector3r(0, 0, -10)] * 10

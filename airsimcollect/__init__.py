@@ -19,7 +19,7 @@ from airsim import Vector3r, Pose, to_quaternion, ImageRequest
 from airsimcollect.segmentation import set_all_to_zero, set_segmentation_ids
 from airsimcollect.helper.helper import update, image_meta_data_json, update_airsim_settings
 
-from airsimcollect.helper.helper_transforms import (parse_lidarData, create_projection_matrix, classify_points)
+from airsimcollect.helper.helper_transforms import (parse_lidarData, create_projection_matrix, classify_points, get_seg2rgb_map)
 
 logger = logging.getLogger("AirSimCapture")
 

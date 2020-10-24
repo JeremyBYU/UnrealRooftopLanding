@@ -238,7 +238,12 @@ def plot_collection_points(points, center, radius, feature=None, sampling_method
               points[:, 2], *uvw.T, length=0.25)
 
     if feature is not None:
-        coords = np.array(feature['geometry'].exterior) # get exterior
+        if feature['geometry'].geom_type == 'LineString':
+            coords = np.array(feature['geometry'].coords)
+            heights = feature['properties']['height'] * np.ones((coords.shape[0], ))
+            coords = np.column_stack([coords, heights])
+        else:
+            coords = np.array(feature['geometry'].exterior) # get exterior
         ax.plot3D(coords[:, 0], coords[:,1], coords[:, 2], 'red')
 
     # generate wire mesh for sphere

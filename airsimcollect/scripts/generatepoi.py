@@ -57,12 +57,12 @@ def remove_collision(collection_points, collisions):
     return collection_points[~obstacle_mask]
 
 
-def sample_circle(focus_point, radius, yaw_range, yaw_delta):
+def sample_circle(focus_point, radius, yaw_range, yaw_delta, fixed_phi=np.pi/2):
     num_yaw, num_phi, _, yaw_endpoint = num_collection_points(yaw_range, yaw_delta, None, None)
     theta = np.linspace(math.radians(
         yaw_range[0]), math.radians(yaw_range[1]), num_yaw, endpoint=yaw_endpoint)
 
-    phi = np.ones_like(theta) * np.pi/2
+    phi = np.ones_like(theta) * fixed_phi
     roll = np.zeros_like(theta)
 
     x = np.cos(theta) * radius + focus_point[0]
@@ -70,7 +70,7 @@ def sample_circle(focus_point, radius, yaw_range, yaw_delta):
     z = np.ones_like(phi) * focus_point[2]
 
     collection_points = np.stack((x, y, z, phi, roll, theta), axis=1)
-    collection_points = np.append(collection_points,[[*focus_point, np.pi/2.0, 0, 0]], axis=0)
+    collection_points = np.append(collection_points,[[*focus_point, fixed_phi, 0, 0]], axis=0)
 
     return collection_points
 
@@ -261,7 +261,8 @@ def generate(map_path, pitch_range, pitch_delta, yaw_range, yaw_delta, height_of
                     collection_points = sample_sphere(focus_point_, radius, pitch_range,
                                                     pitch_delta, yaw_range, yaw_delta)
                 else:
-                    collection_points = sample_circle(focus_point_, radius, yaw_range, yaw_delta)
+                    fixed_phi = pitch_range[0]
+                    collection_points = sample_circle(focus_point_, radius, yaw_range, yaw_delta, fixed_phi=fixed_phi)
                                                     
                 logger.debug("At radius level: %s", radius)
                 if not ignore_collision:

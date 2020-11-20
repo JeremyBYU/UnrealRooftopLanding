@@ -104,7 +104,7 @@ class AirSimCollect(object):
                 self.bar.update(1)
             # Get pos and rot
             pos = [point[0] / 100, point[1] / 100, - (point[2] / 100 + 1)]
-            rot = [point[3] - math.pi / 2, 0, point[5] + math.pi]
+            rot = [point[3], 0, point[5] + math.pi]
             logger.debug(
                 "x: {:.2f}, y: {:.2f}, z: {:.2f}, pitch: {:.2f}, roll: {:.2f}, yaw: {:.2f}".format(*pos, *rot))
             # Begin Timer

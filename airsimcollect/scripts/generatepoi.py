@@ -71,6 +71,7 @@ def sample_circle(focus_point, radius, yaw_range, yaw_delta, fixed_phi=np.pi/2):
 
     collection_points = np.stack((x, y, z, phi, roll, theta), axis=1)
     collection_points = np.append(collection_points,[[*focus_point, fixed_phi, 0, 0]], axis=0)
+    print(fixed_phi)
 
     return collection_points
 
@@ -262,6 +263,7 @@ def generate(map_path, pitch_range, pitch_delta, yaw_range, yaw_delta, height_of
                                                     pitch_delta, yaw_range, yaw_delta)
                 else:
                     fixed_phi = pitch_range[0]
+                    print(fixed_phi)
                     collection_points = sample_circle(focus_point_, radius, yaw_range, yaw_delta, fixed_phi=fixed_phi)
                                                     
                 logger.debug("At radius level: %s", radius)

@@ -40,7 +40,7 @@ Run `poi generate` for polygons and line data to create the Computer Vision Trai
 
 Note that (2) doesn't overwrite the file, but will append to it (`-ao` flag).
 
-We are also adding these new ones as well. These are samped as a circle overhead of the roftoop, with the camera pointing down. 10 meters and 15 meters above:
+We are also adding these new ones as well. These are sampled as a circle overhead of the roftoop, with the camera pointing down. 10 meters and 15 meters above:
 
 1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_cv_train.npy -ho 1000 -ri -500 -sc circle -yd 45`
 2. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_cv_train.npy -ho 1500 -ri -500 -sc circle -yd 45 -ao`
@@ -56,9 +56,9 @@ We are also adding these new ones as well. These are samped as a circle overhead
 
 This generated collection points for Rooftop LIDAR collection. Much smaller collection. Used for testing actual landing site selection. 
 
-1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -ri 1000 -pr 75 75 -pd 0 -yd 90 -rfn class_label`
+1. `poi generate -m assets/maps/poi-roof-lidar-modified.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -ri 1000 -pr 75 75 -pd 0 -yd 90 -rfn class_label`
 
-Proposed- `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -ri -500 -sc circle -yd 90 -rfn class_label`
+Proposed- `poi generate -m assets/maps/poi-roof-lidar-modified.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -ri -500 -sc circle -yd 90 -pr 0 0 -rfn class_label`
 
 ### Generate Images from AirSim
 

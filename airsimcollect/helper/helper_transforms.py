@@ -163,7 +163,7 @@ def same_pose(op, np):
     return (tol(op.x_val, np.x_val) and tol(op.y_val, np.y_val) and tol(op.z_val, np.z_val))
 
 
-def seg2rgb(number_of_classes, cmap_file=SEG_RGB_FILE):
+def seg2rgb(number_of_classes=None, cmap_file=SEG_RGB_FILE):
     cmap_list, _ = get_seg2rgb_map(number_of_classes, cmap_file)
     cmap, norm = create_cmap(cmap_list)
 

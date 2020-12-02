@@ -14,7 +14,7 @@ import numpy as np
 from airsimcollect.helper.helper import update, update_collectors, DEFAULT_CONFIG
 from airsimcollect import AirSimCollect
 
-logger = logging.getLogger("AirSimCapture")
+logger = logging.getLogger("AirSimCollect")
 logger.setLevel(logging.INFO)
 
 def validate_collect_config(config, segmentation_only=False):

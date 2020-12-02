@@ -1,4 +1,4 @@
-"""Defines AirSimCapture Class
+"""Defines AirSimCollect Class
 """
 
 import logging
@@ -17,11 +17,12 @@ import airsim
 from airsim import Vector3r, Pose, to_quaternion, ImageRequest
 
 from airsimcollect.segmentation import set_all_to_zero, set_segmentation_ids
-from airsimcollect.helper.helper import update, image_meta_data_json, update_airsim_settings
+from airsimcollect.helper.helper import update, sensor_meta_data_json, update_airsim_settings
 
-from airsimcollect.helper.helper_transforms import (parse_lidarData, create_projection_matrix, classify_points, get_seg2rgb_map)
+from airsimcollect.helper.helper_transforms import (
+    parse_lidarData, create_projection_matrix, classify_points, get_seg2rgb_map)
 
-logger = logging.getLogger("AirSimCapture")
+logger = logging.getLogger("AirSimCollect")
 
 
 class AirSimCollect(object):
@@ -45,6 +46,7 @@ class AirSimCollect(object):
         self.start_offset_unreal = start_offset_unreal
         self.bar = None if logger.getEffectiveLevel() == logging.DEBUG else bar
         self.airsim_settings = update_airsim_settings()
+        
 
         if self.collection_points is None or self.collectors is None:
             logger.error(
@@ -53,6 +55,7 @@ class AirSimCollect(object):
         self.connect_airsim()
         self.prepare_collectors()
         self.global_id_counter = count(start=global_id_start)
+        self.current_count = 0
 
         self.num_classes = len(
             set([code[1] for code in self.segmentation_codes]))
@@ -83,8 +86,20 @@ class AirSimCollect(object):
     def get_next_global_id(self):
         return next(self.global_id_counter)
 
-    def save_records(self, records, fname="records.json"):
+    def save_records(self, records=[], fname="records.json"):
         fpath = path.normpath(path.join(self.save_dir, fname))
+        # import ipdb; ipdb.set_trace()
+        # Have to put in a form that is JSON serializable
+        ltcp = self.airsim_settings['lidar_to_camera_pos']
+        ltcp = [ltcp.x_val, ltcp.y_val, ltcp.z_val]
+        ltcq = self.airsim_settings['lidar_to_camera_quat']
+        ltcq = [ltcq.w, ltcq.x, ltcq.y, ltcq.z]
+
+        simple_airsim_settings = dict(lidar_local_frame=self.airsim_settings['lidar_local_frame'],
+                                      lidar_to_camera_pos=ltcp, lidar_to_camera_quat=ltcq,
+                                      lidar_z_col=self.airsim_settings['lidar_z_col'])
+
+        records = dict(airsim_settings=simple_airsim_settings, start_offset_unreal=self.start_offset_unreal, records=records)
         with open(fpath, 'w') as outfile:
             json.dump(records, outfile, indent=2)
 
@@ -121,8 +136,12 @@ class AirSimCollect(object):
                 time.sleep(self.min_elapsed_time - elapsed)
 
             if self.collect_data:
-                record = self.collect_data_at_point(pos, rot)
-                records.append(record)
+                try:
+                    record = self.collect_data_at_point(pos, rot)
+                    records.append(record)
+                except Exception:
+                    logger.exception("Error collection data!")
+                    record.append(uid=self.current_count, error=True)
 
             logger.debug("Time Elapsed: %.2f", elapsed)
 
@@ -148,7 +167,7 @@ class AirSimCollect(object):
         images_meta = []
         for i, response in enumerate(image_responses):
             img_collector = image_collectors[i]
-            img_meta = {"camera_name": img_collector['camera_name'],
+            img_meta = {"sensor_name": img_collector['camera_name'], "sensor_type": 'camera',
                         "position": response.camera_position, "rotation": response.camera_orientation,
                         "height": response.height, "width": response.width,
                         "type": img_collector['type']}
@@ -188,7 +207,7 @@ class AirSimCollect(object):
             collector['lidar_name'], collector['vehicle_name'])
         if (len(lidar_data.point_cloud) < 3):
             logger.debug("No lidar points received")
-            return
+            return None
         points = parse_lidarData(lidar_data)
         if points.size < 10:
             logger.warn("Missing lidar data")
@@ -235,13 +254,23 @@ class AirSimCollect(object):
                 global_id, collector['lidar_name'], 'csv'))
             np.savetxt(file_path, points, delimiter=',')
 
+        lidar_meta = dict(sensor_type="lidar", sensor_name=collector['lidar_name'],
+                          position=lidar_data.pose.position, rotation=lidar_data.pose.orientation)
+
+        return lidar_meta
+
     def collect_lidars(self, lidar_collectors, images_meta, global_id):
+        lidars_meta = []
         for collector in lidar_collectors:
             corresponding_camera = collector['camera_name']
             # Search for corresponding segmentation camera image
             camera_img_meta = next((item for item in images_meta if (
-                item["camera_name"] == corresponding_camera) and (item["type"] == 'Segmentation')), None)
-            self.collect_lidar(collector, camera_img_meta, global_id)
+                item["sensor_name"] == corresponding_camera) and (item["type"] == 'Segmentation')), None)
+            lidar_meta = self.collect_lidar(
+                collector, camera_img_meta, global_id)
+            if lidar_meta is not None:
+                lidars_meta.append(lidar_meta)
+        return lidars_meta
 
     def collect_data_at_point(self, pos, rot):
         """Collect data from each collector
@@ -254,6 +283,7 @@ class AirSimCollect(object):
         image_collectors = []
         lidar_collectors = []
         global_id = self.get_next_global_id()
+        self.current_count = global_id
         logger.debug("Global ID: %r", global_id)
         for collector in self.collectors:
             if collector['sensor'] == 'Image':
@@ -269,11 +299,13 @@ class AirSimCollect(object):
 
         images_meta = self.collect_images(
             image_requests, image_collectors, global_id)
+        lidars_meta = []
         if lidar_collectors:
-            self.collect_lidars(lidar_collectors, images_meta, global_id)
+            lidars_meta = self.collect_lidars(
+                lidar_collectors, images_meta, global_id)
 
-        recorded_images_meta = image_meta_data_json(images_meta)
+        sensor_meta_data = sensor_meta_data_json(images_meta, lidars_meta)
         label = self.collection_point_names[global_id] if self.collection_point_names else ''
         record = {"uid": global_id,
-                  'imgs': recorded_images_meta, 'label': label}
+                  'sensors': sensor_meta_data, 'label': label}
         return record

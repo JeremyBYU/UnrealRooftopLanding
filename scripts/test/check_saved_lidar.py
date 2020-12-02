@@ -1,3 +1,7 @@
+"""Will check all the lidar returned
+"""
+import logging
+from rich.logging import RichHandler
 import open3d as o3d
 from pathlib import Path
 from os import listdir
@@ -5,6 +9,13 @@ from os.path import isfile, join
 import numpy as np
 from airsimcollect.helper.helper_transforms import seg2rgb
 
+
+FORMAT = "%(message)s"
+logging.basicConfig(
+    level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
+)
+
+log = logging.getLogger("UnrealLanding")
 
 directory = Path(r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\AirSimCollectData\LidarRoofManualTest")
 
@@ -20,6 +31,7 @@ all_lidar_file_paths = [lidar_directory / f for f in sorted(listdir(lidar_direct
 
 colors_mapping = seg2rgb()
 for lidar_path in all_lidar_file_paths:
+    log.info("Inspecting %s", lidar_path)
     pc_np = np.load(str(lidar_path))
     pc_vis = remove_nans(pc_np)
     label = pc_vis[:, 3].astype(np.int)

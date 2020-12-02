@@ -75,29 +75,16 @@ Next we will launch AirSim in `Multirotor` mode. This time we will generate imag
 
 Notes - Sometimes the camera takes time to update position, add more time delay than 0.5 seconds. In other words the lidar and vehicle move to a new position but the camera is still in the old position (AirSim bug).
 
-LiDAR Sensor Settings:
 
-```json
-        "0": {
-          "SensorType": 6,
-          "Enabled": true,
-          "NumberOfChannels": 16,
-          "RotationsPerSecond": 10,
-          "PointsPerSecond": 100000,
-          "X": 0.46,
-          "Y": 0,
-          "Z": 0,
-          "Roll": 0,
-          "Pitch": 0,
-          "Yaw": 0,
-          "VerticalFOVUpper": -5,
-          "VerticalFOVLower": -45,
-          "HorizontalFOVStart": -30,
-          "HorizontalFOVEnd": 30,
-          "DrawDebugPoints": false,
-          "DataFrame": "VehicleInertialFrame"
-        }
-```
+
+## Extra Notes
+
+* The unreal engine has its own coordinate frame and origin. I call this the Unreal Coordinate Frame (UCF). Z is "up" in the frame.
+* AirSim uses its own NED coordinate frame. The origin is the starting position of the drone before takeoff (controlled by me in a JSON file). The Z axis is flipped in UCF, everything else is the same wth UCF.
+* The position of the UAV body frame and the camera are the same. However the camera is rotated 90 degrees down.
+* The position of the LiDAR is 10 cm further on the x-axis in the body frame of the drone.
+* AirSimCollect will collect all points from the lidar, camera, and ground truth segmentation. The position/orientation of these sensors are recorded as well (NED) frame.
+
 
 ## Gather Data Script
 

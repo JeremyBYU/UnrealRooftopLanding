@@ -5,7 +5,7 @@ import logging
 from os import path
 import json
 
-logger = logging.getLogger("AirSimCapture")
+logger = logging.getLogger("AirSimCollect")
 logger.setLevel(logging.DEBUG)
 
 # airsim.wait_key('Press any key to set all object IDs to 0')

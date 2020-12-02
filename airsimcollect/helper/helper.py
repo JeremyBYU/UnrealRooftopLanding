@@ -19,7 +19,7 @@ from airsim.utils import to_quaternion
 
 from airsimcollect.helper.helper_transforms import get_seg2rgb_map
 
-logger = logging.getLogger("AirSimCapture")
+logger = logging.getLogger("AirSimCollect")
 
 DIR_PATH = path.dirname(path.realpath(__file__))
 
@@ -265,16 +265,25 @@ def plot_collection_points(points, center, radius, feature=None, sampling_method
     plt.show()
 
 
-def image_meta_data_json(images_meta):
-    img_meta_data = []
+def sensor_meta_data_json(images_meta, lidars_meta=[]):
+    sensor_meta_data = []
     for img_meta in images_meta:
         data = {
-            "camera_name": img_meta['camera_name'],
+            "sensor_name": img_meta['sensor_name'],
+            "sensor_type": img_meta['sensor_type'],
             "position": dict(img_meta['position'].__dict__),
             "rotation": dict(img_meta['rotation'].__dict__),
             "height": img_meta["height"],
             "width": img_meta["width"],
             "type": img_meta['type']
         }
-        img_meta_data.append(data)
-    return img_meta_data
+        sensor_meta_data.append(data)
+    for img_meta in lidars_meta:
+        data = {
+            "sensor_name": img_meta['sensor_name'],
+            "sensor_type": img_meta['sensor_type'],
+            "position": dict(img_meta['position'].__dict__),
+            "rotation": dict(img_meta['rotation'].__dict__),
+        }
+        sensor_meta_data.append(data)
+    return sensor_meta_data

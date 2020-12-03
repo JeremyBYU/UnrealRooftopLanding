@@ -58,5 +58,6 @@
   "collection_point_names": "assets/collectionpoints/collection_points_lidar_landing.json",
   "color_codes": "assets/data/segmentation_colors.txt",
   "min_elapsed_time": 0.25,
+  "collections_per_point": 2,
   "start_offset_unreal": [1490, -1120, 2590]
 }

@@ -28,7 +28,7 @@ logger = logging.getLogger("AirSimCollect")
 class AirSimCollect(object):
     def __init__(
             self, name="AirSimCollector", sim_mode="ComputerVision", save_dir="AirSimData", collectors=None,
-            segmentation_codes=[], collection_points=None, global_id_start=0, collector_file_prefix="", bar=None,
+            segmentation_codes=[], collection_points=None, global_id_start=0, collector_file_prefix="", bar=None, collections_per_point=1,
             ignore_collision=False, collection_point_names=None, min_elapsed_time=0.01, color_codes=None, start_offset_unreal=[0, 0, 0]):
         self.name = name
         self.sim_mode = sim_mode
@@ -36,6 +36,7 @@ class AirSimCollect(object):
         self.collectors = collectors
         self.collection_points = collection_points
         self.collector_file_prefix = collector_file_prefix
+        self.collections_per_point = collections_per_point
         self.global_id_start = global_id_start
         self.segmentation_codes = segmentation_codes
         self.collect_data = len(self.collectors) > 0
@@ -55,7 +56,7 @@ class AirSimCollect(object):
         self.connect_airsim()
         self.prepare_collectors()
         self.global_id_counter = count(start=global_id_start)
-        self.current_count = 0
+        self.current_global_id = 0
 
         self.num_classes = len(
             set([code[1] for code in self.segmentation_codes]))
@@ -137,11 +138,13 @@ class AirSimCollect(object):
 
             if self.collect_data:
                 try:
-                    record = self.collect_data_at_point(pos, rot)
-                    records.append(record)
+                    self.current_global_id = self.get_next_global_id()
+                    for sub_uid in range(self.collections_per_point):
+                        record = self.collect_data_at_point(pos, rot, self.current_global_id, sub_uid)
+                        records.append(record)
                 except Exception:
                     logger.exception("Error collection data!")
-                    record.append(uid=self.current_count, error=True)
+                    records.append(uid=self.current_global_id, error=True)
 
             logger.debug("Time Elapsed: %.2f", elapsed)
 
@@ -151,18 +154,18 @@ class AirSimCollect(object):
 
         return records
 
-    def get_file_name(self, global_id, sensor_id, ext):
+    def get_file_name(self, global_id, sub_uid, sensor_id, ext):
         sensor_id_ = sensor_id if sensor_id != "" else "0"
         name = ""
         if self.collector_file_prefix:
-            name = "{}-{}-{}".format(self.collector_file_prefix,
-                                     global_id, sensor_id_)
+            name = "{}-{}-{}-{}".format(self.collector_file_prefix,
+                                     global_id, sub_uid, sensor_id_)
         else:
-            name = "{}-{}".format(global_id, sensor_id_)
+            name = "{}-{}-{}".format(global_id, sub_uid, sensor_id_)
 
         return "{}.{}".format(name, ext) if ext is not None else name
 
-    def collect_images(self, image_requests, image_collectors, global_id):
+    def collect_images(self, image_requests, image_collectors, global_id, sub_uid):
         image_responses = self.client.simGetImages(image_requests)
         images_meta = []
         for i, response in enumerate(image_responses):
@@ -173,13 +176,13 @@ class AirSimCollect(object):
                         "type": img_collector['type']}
             if response.pixels_as_float:
                 file_path = path.join(img_collector['save_dir'], self.get_file_name(
-                    global_id, img_collector['camera_name'], 'pfm'))
+                    global_id, sub_uid, img_collector['camera_name'], 'pfm'))
                 airsim.write_pfm(file_path, airsim.get_pfm_array(response))
                 logger.debug("Image Global ID: %d, Type %d, size %d, pos %s", global_id, response.image_type,
                              len(response.image_data_float), pformat(response.camera_position))
             else:
                 file_path = path.join(img_collector['save_dir'], self.get_file_name(
-                    global_id, img_collector['camera_name'], 'png'))
+                    global_id, sub_uid, img_collector['camera_name'], 'png'))
                 if img_collector['compress']:
                     airsim.write_file(file_path, response.image_data_uint8)
                 else:
@@ -199,7 +202,7 @@ class AirSimCollect(object):
             images_meta.append(img_meta)
         return images_meta
 
-    def collect_lidar(self, collector, img_meta=None, global_id=1):
+    def collect_lidar(self, collector, img_meta=None, global_id=1, sub_uid=0):
 
         # Concern, this lidar data is collected AFTER multiple image requests and saved to disk (IO bottleneck)
         # It may be out of date. Should we find a way to query the lidar data before getting the images?
@@ -247,11 +250,11 @@ class AirSimCollect(object):
         # Save point data as numpy
         if collector['save_as'] == 'numpy':
             file_path = path.join(collector['save_dir'], self.get_file_name(
-                global_id, collector['lidar_name'], 'npy'))
+                global_id, sub_uid, collector['lidar_name'], 'npy'))
             np.save(file_path, points)
         else:
             file_path = path.join(collector['save_dir'], self.get_file_name(
-                global_id, collector['lidar_name'], 'csv'))
+                global_id, sub_uid, collector['lidar_name'], 'csv'))
             np.savetxt(file_path, points, delimiter=',')
 
         lidar_meta = dict(sensor_type="lidar", sensor_name=collector['lidar_name'],
@@ -259,7 +262,7 @@ class AirSimCollect(object):
 
         return lidar_meta
 
-    def collect_lidars(self, lidar_collectors, images_meta, global_id):
+    def collect_lidars(self, lidar_collectors, images_meta, global_id, sub_uid):
         lidars_meta = []
         for collector in lidar_collectors:
             corresponding_camera = collector['camera_name']
@@ -267,12 +270,12 @@ class AirSimCollect(object):
             camera_img_meta = next((item for item in images_meta if (
                 item["sensor_name"] == corresponding_camera) and (item["type"] == 'Segmentation')), None)
             lidar_meta = self.collect_lidar(
-                collector, camera_img_meta, global_id)
+                collector, camera_img_meta, global_id, sub_uid)
             if lidar_meta is not None:
                 lidars_meta.append(lidar_meta)
         return lidars_meta
 
-    def collect_data_at_point(self, pos, rot):
+    def collect_data_at_point(self, pos, rot, global_id, sub_uid):
         """Collect data from each collector
 
         Arguments:
@@ -282,9 +285,8 @@ class AirSimCollect(object):
         image_requests = []
         image_collectors = []
         lidar_collectors = []
-        global_id = self.get_next_global_id()
-        self.current_count = global_id
-        logger.debug("Global ID: %r", global_id)
+
+        logger.debug("Global ID: %r; Sub ID: %s", global_id, sub_uid)
         for collector in self.collectors:
             if collector['sensor'] == 'Image':
                 image_collectors.append(collector)
@@ -298,14 +300,14 @@ class AirSimCollect(object):
                 lidar_collectors.append(collector)
 
         images_meta = self.collect_images(
-            image_requests, image_collectors, global_id)
+            image_requests, image_collectors, global_id, sub_uid)
         lidars_meta = []
         if lidar_collectors:
             lidars_meta = self.collect_lidars(
-                lidar_collectors, images_meta, global_id)
+                lidar_collectors, images_meta, global_id, sub_uid)
 
         sensor_meta_data = sensor_meta_data_json(images_meta, lidars_meta)
         label = self.collection_point_names[global_id] if self.collection_point_names else ''
-        record = {"uid": global_id,
+        record = {"uid": global_id, "sub_uid": sub_uid,
                   'sensors': sensor_meta_data, 'label': label}
         return record

@@ -8,8 +8,10 @@ GREEN = (0, 255/255, 0)
 
 colors_mapping = seg2rgb()
 
+
 def remove_nans(a):
     return a[~np.isnan(a).any(axis=1)]
+
 
 def clear_polys(all_polys, vis):
     for line_mesh in all_polys:
@@ -70,7 +72,7 @@ def handle_shapes(vis, planes, obstacles, all_polys, line_radius=0.15):
 
 def init_vis(width=700, height=700):
 
-    vis = o3d.visualization.Visualizer()
+    vis = o3d.visualization.VisualizerWithKeyCallback()
     vis.create_window("3D Viewer", width, height)
 
     # create point cloud
@@ -81,13 +83,16 @@ def init_vis(width=700, height=700):
     axis_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
     # Create a mesh
     mesh = o3d.geometry.TriangleMesh()
+    # Create a LineMesh for the Frustum
+    frustum = None
 
     # add geometries
     vis.add_geometry(pcd)
     vis.add_geometry(axis_frame)
     vis.add_geometry(mesh)
 
-    geometry_set = dict(pcd=pcd, line_meshes=line_meshes, all_polys=[], axis_frame=axis_frame, mesh=mesh)
+    geometry_set = dict(pcd=pcd, line_meshes=line_meshes, all_polys=[
+    ], axis_frame=axis_frame, mesh=mesh, frustum=frustum)
 
     return vis, geometry_set
 
@@ -122,10 +127,46 @@ def create_linemesh_from_linear_ring(linear_ring, height=0, line_radius=0.15, ro
         points = rotate_func(points)
     return LineMesh(points, colors=color, radius=line_radius)
 
+
 def create_linemesh_from_shapely(polygon, height=0, line_radius=0.15, rotate_func=None):
-    all_line_meshes = [create_linemesh_from_linear_ring(polygon.exterior, height, line_radius, rotate_func, color=GREEN)]
+    all_line_meshes = [create_linemesh_from_linear_ring(
+        polygon.exterior, height, line_radius, rotate_func, color=GREEN)]
 
     for hole in polygon.interiors:
-        all_line_meshes.append(create_linemesh_from_linear_ring(hole, height, line_radius, rotate_func, color=ORANGE))
+        all_line_meshes.append(create_linemesh_from_linear_ring(
+            hole, height, line_radius, rotate_func, color=ORANGE))
 
     return all_line_meshes
+
+
+def create_frustum(vis, dist_to_plane=5.0, start_pos=np.array([0.0, 0.0, 0.0]), hfov=90, vfov=90,
+                   old_frustum=None, radius=0.15, color=[1, 0, 0]):
+    if old_frustum is not None:
+        old_frustum.remove_line(vis, reset_bounding_box=False)
+        # clear_polys(old_frustum, vis)
+
+    x = np.tan(np.radians(hfov/2.0)) * dist_to_plane
+    y = np.tan(np.radians(vfov/2.0)) * dist_to_plane
+
+    point0 = start_pos
+    point1 = start_pos - [x, y, -dist_to_plane]
+    point2 = start_pos - [-x, y, -dist_to_plane]
+    point3 = start_pos - [-x, -y, -dist_to_plane]
+    point4 = start_pos - [x, -y, -dist_to_plane]
+    points = np.stack([point0, point1, point2, point3, point4])
+    lines = [[0, 1], [0, 2], [0, 3], [0, 4],
+             [1, 2], [2, 3], [3, 4], [4, 1]]
+
+    frustum = LineMesh(points, lines, colors=color, radius=radius)
+    frustum.add_line(vis, reset_bounding_box=False)
+    return frustum
+
+def save_view_point(vis, filename=r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\assets\o3d\o3d_view_default.json"):
+    param = vis.get_view_control().convert_to_pinhole_camera_parameters()
+    o3d.io.write_pinhole_camera_parameters(filename, param)
+
+
+def load_view_point(vis, filename=r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\assets\o3d\o3d_view_default.json"):
+    ctr = vis.get_view_control()
+    param = o3d.io.read_pinhole_camera_parameters(filename)
+    ctr.convert_from_pinhole_camera_parameters(param)

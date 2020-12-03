@@ -15,9 +15,13 @@ import numpy as np
 from shapely.geometry import shape
 import shapely
 from airsimcollect.helper.LineMesh import LineMesh
+from airsim.types import Vector3r, Quaternionr
 import cv2
 
-from airsimcollect.helper.o3d_util import get_extrinsics, set_view, handle_shapes, update_point_cloud, translate_meshes, handle_linemeshes, init_vis, clear_polys, create_o3d_colored_point_cloud, create_linemesh_from_shapely
+from airsimcollect.helper.o3d_util import (get_extrinsics, set_view, handle_shapes, update_point_cloud,
+                                           translate_meshes, handle_linemeshes, init_vis, clear_polys,
+                                           create_o3d_colored_point_cloud, create_linemesh_from_shapely,
+                                           create_frustum, load_view_point, save_view_point)
 from airsimcollect.helper.helper_mesh import (
     create_meshes_cuda, update_open_3d_mesh_from_tri_mesh, decimate_column_opc, get_planar_point_density, map_pd_to_decimate_kernel)
 from airsimcollect.helper.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
@@ -35,8 +39,13 @@ logger = logging.getLogger("UnrealLanding")
 
 directory = Path(
     r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\AirSimCollectData\LidarRoofManualTest")
-geoson_map = Path(r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\assets\maps\poi-roof-lidar-modified.geojson")
+geoson_map = Path(
+    r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\assets\maps\poi-roof-lidar-modified.geojson")
 
+o3d_view = Path(
+    r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\assets\o3d\o3d_view_default.json")
+
+FOV = 90
 
 
 def convert_dict(directory, suffix='.'):
@@ -72,14 +81,17 @@ def load_map(fpath, start_offset_unreal):
         class_label = feature['properties']['class_label']
         polygon = shape(feature['geometry'])
         # translate the polygon to make make UCF coincide with NED
-        polygon = shapely.affinity.translate(polygon, *(-1 * start_offset_unreal).tolist())
+        polygon = shapely.affinity.translate(
+            polygon, *(-1 * start_offset_unreal).tolist())
         # Scale polgyon from cm to meters
-        polygon = shapely.affinity.scale(polygon, xfact=0.01, yfact=0.01, zfact=0.01, origin=(0, 0, 0))
+        polygon = shapely.affinity.scale(
+            polygon, xfact=0.01, yfact=0.01, zfact=0.01, origin=(0, 0, 0))
         ned_height = -height/100.0 + start_offset_unreal[2] * .01
         # rprint(polygon)
         line_meshes = create_linemesh_from_shapely(polygon, ned_height)
         centroid = np.array([polygon.centroid.x, polygon.centroid.y])
-        feature_data = dict(ned_height=ned_height, polygon=polygon, line_meshes=line_meshes, class_label=class_label, centroid=centroid)
+        feature_data = dict(ned_height=ned_height, polygon=polygon,
+                            line_meshes=line_meshes, class_label=class_label, centroid=centroid)
         if class_label in features:
             features[class_label].append(feature_data)
         else:
@@ -88,7 +100,8 @@ def load_map(fpath, start_offset_unreal):
     return features
 
 
-def extract_polygons(points_all, vis, mesh, all_polys, pl, ga, ico, config, lidar_beams=64):
+def extract_polygons(points_all, vis, mesh, all_polys, pl, ga, ico, config,
+                     lidar_beams=64, update_mesh=False):
     points = points_all[:, :3]
     num_cols = int(points.shape[0] / lidar_beams)
     opc = points.reshape((lidar_beams, num_cols, 3))
@@ -102,16 +115,19 @@ def extract_polygons(points_all, vis, mesh, all_polys, pl, ga, ico, config, lida
     alg_timings.update(timings)
     # 3. Extract Planes and Polygons
     planes, obstacles, timings = extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks, pl_=pl,
-                                                                        filter_polygons=True, optimized=True,
-                                                                        postprocess=config['polygon']['postprocess'])
+                                                                       filter_polygons=True, optimized=True,
+                                                                       postprocess=config['polygon']['postprocess'])
     alg_timings.update(timings)
     # 100 ms to plot.... wish we had opengl line-width control
     all_polys = handle_shapes(vis, planes, obstacles, all_polys)
-    update_open_3d_mesh_from_tri_mesh(mesh, tri_mesh)
+    if update_mesh:
+        update_open_3d_mesh_from_tri_mesh(mesh, tri_mesh)
     return all_polys
 
+
 def main():
-    records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict = load_records(directory)
+    records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict = load_records(
+        directory)
 
     # Load yaml file
     with open('./assets/config/PolylidarParams.yaml') as file:
@@ -127,45 +143,56 @@ def main():
 
     # Initialize 3D Viewer and Map
     vis, geometry_set = init_vis()
-    line_meshes = [feature['line_meshes'] for features in map_features_dict.values() for feature in features]
-    line_meshes = [line_mesh for line_mesh_set in line_meshes for line_mesh in line_mesh_set]
-    geometry_set['line_meshes'] = handle_linemeshes(vis, geometry_set['line_meshes'], line_meshes)
+    line_meshes = [feature['line_meshes']
+                   for features in map_features_dict.values() for feature in features]
+    line_meshes = [
+        line_mesh for line_mesh_set in line_meshes for line_mesh in line_mesh_set]
+    geometry_set['line_meshes'] = handle_linemeshes(
+        vis, geometry_set['line_meshes'], line_meshes)
+
+    load_view_point(vis, str(o3d_view))
+    # vis.register_key_callback(ord("A"), save_view_point )
 
     for record in records['records']:
         logger.info("Inspecting record; UID: %s; SUB-UID: %s",
                     record['uid'], record['sub_uid'])
         path_key = f"{record['uid']}-{record['sub_uid']}-0"
-        bulding_label = record['label']
+        bulding_label = record['label']  # building name
+        bulding_feature = map_features_dict[bulding_label]
+        camera_position = Vector3r(
+            **record['sensors'][0]['position']).to_numpy_array()
+        distance_to_camera = bulding_feature[0]['ned_height'] - \
+            camera_position[2]
+
+        # Create Frustum
+        geometry_set['frustum'] = create_frustum(vis, distance_to_camera, camera_position,
+                                                 hfov=FOV, vfov=FOV,
+                                                 old_frustum=geometry_set['frustum'])
 
         # Load Images
         img = cv2.imread(str(scene_paths_dict[path_key]))
-        cv2.imshow('Image View'.format(record['uid']), img)
+        cv2.imshow('Scene View'.format(record['uid']), img)
 
         # Load Lidar Data
         pc_np = np.load(str(lidar_paths_dict[path_key]))
         pcd = create_o3d_colored_point_cloud(pc_np, geometry_set['pcd'])
 
         # Polygon Extraction
-
-        geometry_set['all_polys'] = extract_polygons(pc_np, vis, geometry_set['mesh'], geometry_set['all_polys'], pl, ga, ico, config)
+        geometry_set['all_polys'] = extract_polygons(
+            pc_np, vis, geometry_set['mesh'], geometry_set['all_polys'], pl, ga, ico, config)
 
         # Load GT Bulding Data
-        # feature = map_features_dict[bulding_label]
         # geometry_set['line_meshes'] = handle_shapes(vis, geometry_set['line_meshes'], feature[0]['line_meshes'])
-        
+
         # Update geometry and view
         vis.update_geometry(pcd)
-        vis.reset_view_point(True)
         vis.update_renderer()
-      
         while(True):
             vis.poll_events()
             vis.update_renderer()
             res = cv2.waitKey(10)
-            # current_extrinsics = get_extrinsics(vis)
             if res != -1:
                 break
-
 
 
 if __name__ == "__main__":

@@ -6,6 +6,7 @@ import sys
 from pathlib import Path
 from os import listdir
 from os.path import isfile, join
+from functools import partial
 
 import yaml
 from rich.logging import RichHandler
@@ -21,7 +22,7 @@ import cv2
 from airsimcollect.helper.o3d_util import (get_extrinsics, set_view, handle_shapes, update_point_cloud,
                                            translate_meshes, handle_linemeshes, init_vis, clear_polys,
                                            create_o3d_colored_point_cloud, create_linemesh_from_shapely,
-                                           create_frustum, load_view_point, save_view_point)
+                                           create_frustum, load_view_point, save_view_point, toggle_visibility)
 from airsimcollect.helper.helper_mesh import (
     create_meshes_cuda, update_open_3d_mesh_from_tri_mesh, decimate_column_opc, get_planar_point_density, map_pd_to_decimate_kernel)
 from airsimcollect.helper.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
@@ -40,7 +41,7 @@ logger = logging.getLogger("UnrealLanding")
 directory = Path(
     r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\AirSimCollectData\LidarRoofManualTest")
 geoson_map = Path(
-    r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\assets\maps\poi-roof-lidar-modified.geojson")
+    r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\assets\maps\roof-lidar-manual.geojson")
 
 o3d_view = Path(
     r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\assets\o3d\o3d_view_default.json")
@@ -101,7 +102,7 @@ def load_map(fpath, start_offset_unreal):
 
 
 def extract_polygons(points_all, vis, mesh, all_polys, pl, ga, ico, config,
-                     lidar_beams=64, update_mesh=False):
+                     lidar_beams=64, update_mesh=False, vis_pl=True):
     points = points_all[:, :3]
     num_cols = int(points.shape[0] / lidar_beams)
     opc = points.reshape((lidar_beams, num_cols, 3))
@@ -119,7 +120,7 @@ def extract_polygons(points_all, vis, mesh, all_polys, pl, ga, ico, config,
                                                                        postprocess=config['polygon']['postprocess'])
     alg_timings.update(timings)
     # 100 ms to plot.... wish we had opengl line-width control
-    all_polys = handle_shapes(vis, planes, obstacles, all_polys)
+    all_polys = handle_shapes(vis, planes, obstacles, all_polys, visible=vis_pl)
     if update_mesh:
         update_open_3d_mesh_from_tri_mesh(mesh, tri_mesh)
     return all_polys
@@ -147,11 +148,23 @@ def main():
                    for features in map_features_dict.values() for feature in features]
     line_meshes = [
         line_mesh for line_mesh_set in line_meshes for line_mesh in line_mesh_set]
-    geometry_set['line_meshes'] = handle_linemeshes(
-        vis, geometry_set['line_meshes'], line_meshes)
+    geometry_set['map_polys'] = handle_linemeshes(
+        vis, geometry_set['map_polys'], line_meshes)
+
+    def toggle_pcd_visibility(vis):
+        toggle_visibility(vis, geometry_set['pcd'], True)
 
     load_view_point(vis, str(o3d_view))
-    # vis.register_key_callback(ord("A"), save_view_point )
+    vis.register_key_callback(ord("X"), partial(
+        toggle_visibility, geometry_set, 'vis_pcd', 'pcd'))
+    vis.register_key_callback(ord("C"), partial(
+        toggle_visibility, geometry_set, 'vis_map', 'map_polys'))
+    vis.register_key_callback(ord("V"), partial(
+        toggle_visibility, geometry_set, 'vis_pl', 'pl_polys'))
+    vis.register_key_callback(ord("B"), partial(
+        toggle_visibility, geometry_set, 'vis_frustum', 'frustum'))
+    # vis.register_key_callback(ord("C"), toggle_pcd_visibility)
+    # vis.register_key_callback(ord("V"), toggle_pcd_visibility)
 
     for record in records['records']:
         logger.info("Inspecting record; UID: %s; SUB-UID: %s",
@@ -178,8 +191,8 @@ def main():
         pcd = create_o3d_colored_point_cloud(pc_np, geometry_set['pcd'])
 
         # Polygon Extraction
-        geometry_set['all_polys'] = extract_polygons(
-            pc_np, vis, geometry_set['mesh'], geometry_set['all_polys'], pl, ga, ico, config)
+        geometry_set['pl_polys'] = extract_polygons(
+            pc_np, vis, geometry_set['mesh'], geometry_set['pl_polys'], pl, ga, ico, config, vis_pl=geometry_set['vis_pl'])
 
         # Load GT Bulding Data
         # geometry_set['line_meshes'] = handle_shapes(vis, geometry_set['line_meshes'], feature[0]['line_meshes'])

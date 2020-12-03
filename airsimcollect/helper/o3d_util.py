@@ -18,6 +18,11 @@ def clear_polys(all_polys, vis):
         line_mesh.remove_line(vis, False)
     return []
 
+def add_polys(all_polys, vis):
+    for line_mesh in all_polys:
+        line_mesh.add_line(vis, False)
+    return []
+
 
 def get_extrinsics(vis):
     ctr = vis.get_view_control()
@@ -53,18 +58,20 @@ def translate_meshes(meshes, shift_x=True):
         y_amt_ += y_amt
 
 
-def handle_shapes(vis, planes, obstacles, all_polys, line_radius=0.15):
+def handle_shapes(vis, planes, obstacles, all_polys, line_radius=0.15, visible=True):
     all_polys = clear_polys(all_polys, vis)
     for plane, _ in planes:
         points = np.array(plane.exterior)
         line_mesh = LineMesh(points, colors=GREEN, radius=line_radius)
-        line_mesh.add_line(vis, False)
+        if visible:
+            line_mesh.add_line(vis, False)
         all_polys.append(line_mesh)
 
     for plane, _ in obstacles:
         points = np.array(plane.exterior)
         line_mesh = LineMesh(points, colors=ORANGE, radius=line_radius)
-        line_mesh.add_line(vis, False)
+        if visible:
+            line_mesh.add_line(vis, False)
         all_polys.append(line_mesh)
 
     return all_polys
@@ -78,7 +85,7 @@ def init_vis(width=700, height=700):
     # create point cloud
     pcd = o3d.geometry.PointCloud()
     # create empty polygons list
-    line_meshes = []
+    map_polys = []
     # Create axis frame
     axis_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
     # Create a mesh
@@ -89,10 +96,11 @@ def init_vis(width=700, height=700):
     # add geometries
     vis.add_geometry(pcd)
     vis.add_geometry(axis_frame)
-    vis.add_geometry(mesh)
+    # vis.add_geometry(mesh)
 
-    geometry_set = dict(pcd=pcd, line_meshes=line_meshes, all_polys=[
-    ], axis_frame=axis_frame, mesh=mesh, frustum=frustum)
+    geometry_set = dict(pcd=pcd, map_polys=map_polys, pl_polys=[
+    ], axis_frame=axis_frame, mesh=mesh, frustum=frustum, vis_pcd=True,
+        vis_map=True, vis_pl=True, vis_mesh=False, vis_frustum=True)
 
     return vis, geometry_set
 
@@ -161,6 +169,7 @@ def create_frustum(vis, dist_to_plane=5.0, start_pos=np.array([0.0, 0.0, 0.0]), 
     frustum.add_line(vis, reset_bounding_box=False)
     return frustum
 
+
 def save_view_point(vis, filename=r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\assets\o3d\o3d_view_default.json"):
     param = vis.get_view_control().convert_to_pinhole_camera_parameters()
     o3d.io.write_pinhole_camera_parameters(filename, param)
@@ -170,3 +179,41 @@ def load_view_point(vis, filename=r"C:\Users\Jeremy\Documents\UMICH\Research\Unr
     ctr = vis.get_view_control()
     param = o3d.io.read_pinhole_camera_parameters(filename)
     ctr.convert_from_pinhole_camera_parameters(param)
+
+
+def toggle_visibility(geometry_set, visibility_key, geometry_key, vis):
+    """Toggles visibility of geometries by adding and removing to visualizer. Open3D has no opacity or visibility mechanism..."""
+    geometry = geometry_set[geometry_key]
+    if isinstance(geometry, list):
+        # print("This is a list of LineMeshes")
+        # make invisible by removing geometry
+        if geometry_set[visibility_key]:
+            clear_polys(geometry, vis)
+        else:
+            add_polys(geometry, vis)
+        # toggle geometry
+        geometry_set[visibility_key] = not geometry_set[visibility_key]
+    elif issubclass(geometry.__class__, o3d.geometry.Geometry):
+        # print("This is an Open3D geometry")
+        # make invisible by removing geometry
+        if geometry_set[visibility_key]:
+            vis.remove_geometry(geometry, False)
+        else:
+            vis.add_geometry(geometry, False)
+        # toggle geometry
+        geometry_set[visibility_key] = not geometry_set[visibility_key]
+    elif isinstance(geometry, LineMesh):
+        # print("This is a LineMesh")
+        if geometry_set[visibility_key]:
+            geometry.remove_line(vis, False)
+        else:
+            geometry.add_line(vis, False)
+        # toggle geometry
+        geometry_set[visibility_key] = not geometry_set[visibility_key]
+    elif geometry is None:
+        pass
+        # print("This is nothing")
+    else:
+        print("Not able to handle this geometry type")
+
+    print("Toggled visibility of ", geometry_key)

@@ -150,7 +150,7 @@ def main():
                                                                                    postprocess=config['polygon']['postprocess'])
                 alg_timings.update(timings)
                 # 100 ms to plot.... wish we had opengl line-width control
-                all_polys = handle_shapes(vis, planes, obstacles, all_polys)
+                all_polys = handle_shapes(vis, planes, all_polys)
                 # print(planes)
                 # update the open3d geometries
                 # update_point_cloud(pcd, points)

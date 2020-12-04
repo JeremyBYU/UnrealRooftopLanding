@@ -6,7 +6,7 @@ import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
 
-from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes
+from polylidar.polylidarutil.plane_filtering import filter_planes_and_holes, filter_planes
 from polylidar import MatrixDouble, Polylidar3D
 from polylidar.polylidarutil.open3d_util import create_lines
 
@@ -118,9 +118,10 @@ def filter_and_create_polygons(points, polygons, rm=None, line_radius=0.005,
                                                 positive_buffer=0.00, negative_buffer=0.00, simplify=0.0)):
     " Apply polygon filtering algorithm, return Open3D Mesh Lines "
     t1 = time.perf_counter()
-    planes, obstacles = filter_planes_and_holes(polygons, points, postprocess, rm=rm)
+    # planes, obstacles = filter_planes(polygons, points, postprocess, rm=rm)
+    planes = filter_planes(polygons, points, postprocess, rm=rm)
     t2 = time.perf_counter()
-    return planes, obstacles, (t2 - t1) * 1000
+    return planes, (t2 - t1) * 1000
 
 
 def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
@@ -160,10 +161,10 @@ def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
             polygons_for_normal = all_polygons[i]
             # print(polygons_for_normal)
             if len(polygons_for_normal) > 0:
-                planes_shapely, obstacles_shapely, filter_time = filter_and_create_polygons(
+                planes_shapely, filter_time = filter_and_create_polygons(
                     vertices, polygons_for_normal, rm=rm, postprocess=postprocess)
                 all_planes_shapely.extend(planes_shapely)
-                all_obstacles_shapely.extend(obstacles_shapely)
+                # all_obstacles_shapely.extend(obstacles_shapely)
                 time_filter.append(filter_time)
                 # all_poly_lines.extend(poly_lines)
 

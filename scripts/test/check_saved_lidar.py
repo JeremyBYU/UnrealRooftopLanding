@@ -9,7 +9,6 @@ from os.path import isfile, join
 from functools import partial
 
 import yaml
-from rich.logging import RichHandler
 from rich import print as rprint
 import open3d as o3d
 import numpy as np
@@ -19,6 +18,7 @@ from airsimcollect.helper.LineMesh import LineMesh
 from airsim.types import Vector3r, Quaternionr
 import cv2
 
+from airsimcollect.helper.helper_logging import logger
 from airsimcollect.helper.o3d_util import (get_extrinsics, set_view, handle_shapes, update_point_cloud,
                                            translate_meshes, handle_linemeshes, init_vis, clear_polys,
                                            create_o3d_colored_point_cloud, create_linemesh_from_shapely,
@@ -30,13 +30,6 @@ from airsimcollect.helper.helper_polylidar import extract_all_dominant_plane_nor
 from fastga import GaussianAccumulatorS2Beta, GaussianAccumulatorS2, IcoCharts
 from polylidar import MatrixDouble, extract_tri_mesh_from_organized_point_cloud, HalfEdgeTriangulation, Polylidar3D
 
-
-FORMAT = "%(message)s"
-logging.basicConfig(
-    level="NOTSET", format=FORMAT, datefmt="[%X]", handlers=[RichHandler()]
-)
-
-logger = logging.getLogger("UnrealLanding")
 
 directory = Path(
     r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\AirSimCollectData\LidarRoofManualTest")
@@ -120,7 +113,9 @@ def extract_polygons(points_all, vis, mesh, all_polys, pl, ga, ico, config,
                                                                        postprocess=config['polygon']['postprocess'])
     alg_timings.update(timings)
     # 100 ms to plot.... wish we had opengl line-width control
-    all_polys = handle_shapes(vis, planes, obstacles, all_polys, visible=vis_pl)
+    all_polys = handle_shapes(vis, planes, all_polys, visible=vis_pl)
+    # isec_polys = intersect_polys()
+
     if update_mesh:
         update_open_3d_mesh_from_tri_mesh(mesh, tri_mesh)
     return all_polys
@@ -167,6 +162,8 @@ def main():
     # vis.register_key_callback(ord("V"), toggle_pcd_visibility)
 
     for record in records['records']:
+        if record['uid'] < 6:
+            continue
         logger.info("Inspecting record; UID: %s; SUB-UID: %s",
                     record['uid'], record['sub_uid'])
         path_key = f"{record['uid']}-{record['sub_uid']}-0"
@@ -180,7 +177,7 @@ def main():
         # Create Frustum
         geometry_set['frustum'] = create_frustum(vis, distance_to_camera, camera_position,
                                                  hfov=FOV, vfov=FOV,
-                                                 old_frustum=geometry_set['frustum'])
+                                                 old_frustum=geometry_set['frustum'], vis_frustum=geometry_set['vis_frustum'])
 
         # Load Images
         img = cv2.imread(str(scene_paths_dict[path_key]))
@@ -193,6 +190,7 @@ def main():
         # Polygon Extraction
         geometry_set['pl_polys'] = extract_polygons(
             pc_np, vis, geometry_set['mesh'], geometry_set['pl_polys'], pl, ga, ico, config, vis_pl=geometry_set['vis_pl'])
+        # print(geometry_set['pl_polys'],geometry_set['vis_pl'] )
 
         # Load GT Bulding Data
         # geometry_set['line_meshes'] = handle_shapes(vis, geometry_set['line_meshes'], feature[0]['line_meshes'])

@@ -2,6 +2,7 @@ import open3d as o3d
 import numpy as np
 from .LineMesh import LineMesh
 from airsimcollect.helper.helper_transforms import seg2rgb
+from airsimcollect.helper.helper_logging import logger
 
 ORANGE = (255/255, 188/255, 0)
 GREEN = (0, 255/255, 0)
@@ -58,24 +59,34 @@ def translate_meshes(meshes, shift_x=True):
         y_amt_ += y_amt
 
 
-def handle_shapes(vis, planes, obstacles, all_polys, line_radius=0.15, visible=True):
+# def handle_shapes(vis, planes, obstacles, all_polys, line_radius=0.15, visible=True):
+#     all_polys = clear_polys(all_polys, vis)
+#     for plane, _ in planes:
+#         points = np.array(plane.exterior)
+#         line_mesh = LineMesh(points, colors=GREEN, radius=line_radius)
+#         if visible:
+#             line_mesh.add_line(vis, False)
+#         all_polys.append(line_mesh)
+
+#     for plane, _ in obstacles:
+#         points = np.array(plane.exterior)
+#         line_mesh = LineMesh(points, colors=ORANGE, radius=line_radius)
+#         if visible:
+#             line_mesh.add_line(vis, False)
+#         all_polys.append(line_mesh)
+
+#     return all_polys
+
+
+def handle_shapes(vis, planes, all_polys, line_radius=0.15, visible=True):
+    # print(all_polys, visible)
     all_polys = clear_polys(all_polys, vis)
     for plane, _ in planes:
-        points = np.array(plane.exterior)
-        line_mesh = LineMesh(points, colors=GREEN, radius=line_radius)
+        lm = create_linemesh_from_shapely(plane)
+        all_polys.extend(lm)
         if visible:
-            line_mesh.add_line(vis, False)
-        all_polys.append(line_mesh)
-
-    for plane, _ in obstacles:
-        points = np.array(plane.exterior)
-        line_mesh = LineMesh(points, colors=ORANGE, radius=line_radius)
-        if visible:
-            line_mesh.add_line(vis, False)
-        all_polys.append(line_mesh)
-
+            add_polys(lm, vis)
     return all_polys
-
 
 def init_vis(width=700, height=700):
 
@@ -92,6 +103,8 @@ def init_vis(width=700, height=700):
     mesh = o3d.geometry.TriangleMesh()
     # Create a LineMesh for the Frustum
     frustum = None
+    # Create a Line Mesh for the interstion of the Frustum and predicted polygons
+    isec_poly = None
 
     # add geometries
     vis.add_geometry(pcd)
@@ -99,8 +112,8 @@ def init_vis(width=700, height=700):
     # vis.add_geometry(mesh)
 
     geometry_set = dict(pcd=pcd, map_polys=map_polys, pl_polys=[
-    ], axis_frame=axis_frame, mesh=mesh, frustum=frustum, vis_pcd=True,
-        vis_map=True, vis_pl=True, vis_mesh=False, vis_frustum=True)
+    ], axis_frame=axis_frame, mesh=mesh, frustum=frustum, isec_poly=isec_poly, vis_pcd=True,
+        vis_map=True, vis_pl=True, vis_mesh=False, vis_frustum=True, vis_isec=False)
 
     return vis, geometry_set
 
@@ -128,7 +141,7 @@ def create_o3d_colored_point_cloud(pc_np, pcd=None):
 
 def create_linemesh_from_linear_ring(linear_ring, height=0, line_radius=0.15, rotate_func=None, color=GREEN):
     points = np.array(linear_ring)
-    if points.ndim == 2:
+    if points.shape[1] == 2:
         height_np = np.ones((points.shape[0], 1)) * height
         points = np.concatenate((points, height_np), axis=1)
     if rotate_func:
@@ -148,7 +161,7 @@ def create_linemesh_from_shapely(polygon, height=0, line_radius=0.15, rotate_fun
 
 
 def create_frustum(vis, dist_to_plane=5.0, start_pos=np.array([0.0, 0.0, 0.0]), hfov=90, vfov=90,
-                   old_frustum=None, radius=0.15, color=[1, 0, 0]):
+                   old_frustum=None, radius=0.15, color=[1, 0, 0], vis_frustum=True):
     if old_frustum is not None:
         old_frustum.remove_line(vis, reset_bounding_box=False)
         # clear_polys(old_frustum, vis)
@@ -166,7 +179,8 @@ def create_frustum(vis, dist_to_plane=5.0, start_pos=np.array([0.0, 0.0, 0.0]), 
              [1, 2], [2, 3], [3, 4], [4, 1]]
 
     frustum = LineMesh(points, lines, colors=color, radius=radius)
-    frustum.add_line(vis, reset_bounding_box=False)
+    if vis_frustum:
+        frustum.add_line(vis, reset_bounding_box=False)
     return frustum
 
 
@@ -214,6 +228,6 @@ def toggle_visibility(geometry_set, visibility_key, geometry_key, vis):
         pass
         # print("This is nothing")
     else:
-        print("Not able to handle this geometry type")
+        logger.info("Not able to handle this geometry type")
 
-    print("Toggled visibility of ", geometry_key)
+    logger.info("Toggled visibility of %s", geometry_key)

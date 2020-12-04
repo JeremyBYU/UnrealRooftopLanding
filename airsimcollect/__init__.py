@@ -22,8 +22,7 @@ from airsimcollect.helper.helper import update, sensor_meta_data_json, update_ai
 from airsimcollect.helper.helper_transforms import (
     parse_lidarData, create_projection_matrix, classify_points, get_seg2rgb_map)
 
-logger = logging.getLogger("AirSimCollect")
-
+from airsimcollect.helper.helper_logging import logger
 
 class AirSimCollect(object):
     def __init__(

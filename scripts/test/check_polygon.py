@@ -113,7 +113,7 @@ def main():
                                                                                    filter_polygons=True, optimized=True,
                                                                                    postprocess=config['polygon']['postprocess'])
                 alg_timings.update(timings)
-                all_polys = handle_shapes(vis, planes, obstacles, all_polys) # 100 ms to plot.... wish we had opengl line-width control
+                all_polys = handle_shapes(vis, planes, all_polys) # 100 ms to plot.... wish we had opengl line-width control
                 # print(planes)
                 # update the open3d geometries
                 # update_point_cloud(pcd, points)

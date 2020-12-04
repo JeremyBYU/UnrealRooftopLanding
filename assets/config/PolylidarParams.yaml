@@ -42,5 +42,5 @@ polygon:
         max: 400 
     # These parameters correspond to Shapely polygon geometry operations
     positive_buffer: 0.1 # m, Positively expand polygon.  Fills in small holes
-    negative_buffer: 0.2 # m, Negative buffer to polygon. Expands holes and constricts outer hull of polygon
+    negative_buffer: 0.25 # m, Negative buffer to polygon. Expands holes and constricts outer hull of polygon
     simplify: 0.3  # m, simplify edges of polygon

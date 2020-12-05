@@ -9,6 +9,51 @@ GREEN = (0, 255/255, 0)
 
 colors_mapping = seg2rgb()
 
+class VisibleGeometry(object):
+    def __init__(self, geometry, vis, visible=True, name=''):
+        self.geometry = geometry
+        self.visible = visible
+        self.name = name
+        self.vis = vis
+        if visible:
+            self.add_to_vis()
+    
+    def add_to_vis(self):
+        if self.geometry is not None:
+            self.vis.add_geometry(self.geometry, False)
+
+    def remove_from_vis(self):
+        if self.geometry is not None:
+            self.vis.remove_geometry(self.geometry, False)
+
+    def toggle_visibility(self):
+        if self.visible:
+            self.remove_from_vis()
+        else:
+            self.add_to_vis()
+        self.visible = not self.visible
+
+class VisibleLineMeshes(object):
+    def __init__(self, line_meshes, vis, visible=True, name=''):
+        self.line_meshes = line_meshes
+        self.visible = visible
+        self.name = name
+        self.vis = vis
+        if visible:
+            self.add_to_vis()
+    
+    def add_to_vis(self):
+        add_polys(self.line_meshes, self.vis)
+
+    def remove_from_vis(self):
+        clear_polys(self.line_meshes, self.vis)
+
+    def toggle_visibility(self):
+        if self.visible:
+            self.remove_from_vis()
+        else:
+            self.add_to_vis()
+        self.visible = not self.visible
 
 def remove_nans(a):
     return a[~np.isnan(a).any(axis=1)]
@@ -88,34 +133,7 @@ def handle_shapes(vis, planes, all_polys, line_radius=0.15, visible=True):
             add_polys(lm, vis)
     return all_polys
 
-def init_vis(width=700, height=700):
 
-    vis = o3d.visualization.VisualizerWithKeyCallback()
-    vis.create_window("3D Viewer", width, height)
-
-    # create point cloud
-    pcd = o3d.geometry.PointCloud()
-    # create empty polygons list
-    map_polys = []
-    # Create axis frame
-    axis_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
-    # Create a mesh
-    mesh = o3d.geometry.TriangleMesh()
-    # Create a LineMesh for the Frustum
-    frustum = None
-    # Create a Line Mesh for the interstion of the Frustum and predicted polygons
-    isec_poly = None
-
-    # add geometries
-    vis.add_geometry(pcd)
-    vis.add_geometry(axis_frame)
-    # vis.add_geometry(mesh)
-
-    geometry_set = dict(pcd=pcd, map_polys=map_polys, pl_polys=[
-    ], axis_frame=axis_frame, mesh=mesh, frustum=frustum, isec_poly=isec_poly, vis_pcd=True,
-        vis_map=True, vis_pl=True, vis_mesh=False, vis_frustum=True, vis_isec=False)
-
-    return vis, geometry_set
 
 
 def handle_linemeshes(vis, old_line_meshes, new_line_meshes):
@@ -125,7 +143,7 @@ def handle_linemeshes(vis, old_line_meshes, new_line_meshes):
     return new_line_meshes
 
 
-def create_o3d_colored_point_cloud(pc_np, pcd=None):
+def update_o3d_colored_point_cloud(pc_np, pcd=None):
     pc_vis = remove_nans(pc_np)
     label = pc_vis[:, 3].astype(np.int)
 
@@ -160,11 +178,10 @@ def create_linemesh_from_shapely(polygon, height=0, line_radius=0.15, rotate_fun
     return all_line_meshes
 
 
-def create_frustum(vis, dist_to_plane=5.0, start_pos=np.array([0.0, 0.0, 0.0]), hfov=90, vfov=90,
-                   old_frustum=None, radius=0.15, color=[1, 0, 0], vis_frustum=True):
-    if old_frustum is not None:
-        old_frustum.remove_line(vis, reset_bounding_box=False)
-        # clear_polys(old_frustum, vis)
+def update_frustum(vis, dist_to_plane=5.0, start_pos=np.array([0.0, 0.0, 0.0]), hfov=90, vfov=90,
+                   frustum:VisibleLineMeshes=None, radius=0.15, color=[1, 0, 0], vis_frustum=True):
+    
+    frustum.remove_from_vis()
 
     x = np.tan(np.radians(hfov/2.0)) * dist_to_plane
     y = np.tan(np.radians(vfov/2.0)) * dist_to_plane
@@ -178,10 +195,9 @@ def create_frustum(vis, dist_to_plane=5.0, start_pos=np.array([0.0, 0.0, 0.0]), 
     lines = [[0, 1], [0, 2], [0, 3], [0, 4],
              [1, 2], [2, 3], [3, 4], [4, 1]]
 
-    frustum = LineMesh(points, lines, colors=color, radius=radius)
-    if vis_frustum:
-        frustum.add_line(vis, reset_bounding_box=False)
-    return frustum
+    frustum.line_meshes = [LineMesh(points, lines, colors=color, radius=radius)]
+    if frustum.visible:
+        frustum.add_to_vis()
 
 
 def save_view_point(vis, filename=r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\assets\o3d\o3d_view_default.json"):
@@ -195,80 +211,47 @@ def load_view_point(vis, filename=r"C:\Users\Jeremy\Documents\UMICH\Research\Unr
     ctr.convert_from_pinhole_camera_parameters(param)
 
 
-def toggle_visibility(geometry_set, visibility_key, geometry_key, vis):
+def toggle_visibility(geometry_set, geometry_key, vis):
     """Toggles visibility of geometries by adding and removing to visualizer. Open3D has no opacity or visibility mechanism..."""
     geometry = geometry_set[geometry_key]
-    if isinstance(geometry, list):
-        # print("This is a list of LineMeshes")
-        # make invisible by removing geometry
-        if geometry_set[visibility_key]:
-            clear_polys(geometry, vis)
-        else:
-            add_polys(geometry, vis)
-        # toggle geometry
-        geometry_set[visibility_key] = not geometry_set[visibility_key]
-    elif issubclass(geometry.__class__, o3d.geometry.Geometry):
-        # print("This is an Open3D geometry")
-        # make invisible by removing geometry
-        if geometry_set[visibility_key]:
-            vis.remove_geometry(geometry, False)
-        else:
-            vis.add_geometry(geometry, False)
-        # toggle geometry
-        geometry_set[visibility_key] = not geometry_set[visibility_key]
-    elif isinstance(geometry, LineMesh):
-        # print("This is a LineMesh")
-        if geometry_set[visibility_key]:
-            geometry.remove_line(vis, False)
-        else:
-            geometry.add_line(vis, False)
-        # toggle geometry
-        geometry_set[visibility_key] = not geometry_set[visibility_key]
-    elif geometry is None:
-        pass
-        # print("This is nothing")
-    else:
-        logger.info("Not able to handle this geometry type")
-
-    logger.info("Toggled visibility of %s", geometry_key)
+    geometry.toggle_visibility()
 
 
-class VisibleMesh(object):
-    def __init__(self, o3d_mesh, visible=True, name=''):
-        self.o3d_mesh = o3d_mesh
-        self.visible = visible
-        self.name = name
-    
-    def add_to_vis(self, vis):
-        vis.add_geometry(self.o3d_mesh, False)
+def init_vis(width=700, height=700):
 
-    def remove_from_vis(self, vis):
-        vis.remove_geometry(self.o3d_mesh, False)
+    vis = o3d.visualization.VisualizerWithKeyCallback()
+    vis.create_window("3D Viewer", width, height)
 
-    def toggle_visibility(self, vis):
-        if self.visible:
-            self.remove_from_vis(vis)
-        else:
-            self.add_to_vis(vis)
-        self.visible = not self.visible
+    # Create axis frame
+    axis_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
+    # Create mesh
+    mesh = o3d.geometry.TriangleMesh()
+    # create point cloud
+    pcd = VisibleGeometry(o3d.geometry.PointCloud(), vis, visible=True, name='pcd')
+    # create map
+    map_polys = VisibleLineMeshes([], vis, visible=True, name='map_polys')
+    # create polylidar polygons
+    pl_polys = VisibleLineMeshes([], vis, visible=True, name='pl_isec')
+    # Create a mesh
+    # Create a LineMesh for the Frustum
+    frustum = VisibleLineMeshes([], vis, visible=True, name='frustum')
+    # Create a Line Mesh for the interstion of the Frustum and predicted polygons
+    pl_isec = VisibleLineMeshes([], vis, visible=True, name='pl_isec')
+    gt_isec = VisibleLineMeshes([], vis, visible=True, name='gt_isec')
 
-class VisibleLineMeshes(object):
-    def __init__(self, line_meshes, visible=True, name=''):
-        self.line_meshes = line_meshes
-        self.visible = visible
-        self.name = name
-    
-    def add_to_vis(self, vis):
-        add_polys(self.line_meshes, vis)
+    # add geometries
+    vis.add_geometry(axis_frame)
+    # vis.add_geometry(mesh)
 
-    def remove_from_vis(self, vis):
-        clear_polys(self.line_meshes, vis)
+    geometry_set = dict(axis_frame=axis_frame, mesh=mesh, pcd=pcd, map_polys=map_polys,
+                        pl_polys=pl_polys, frustum=frustum, pl_isec=pl_isec, gt_isec=gt_isec)
 
-    def toggle_visibility(self, vis):
-        if self.visible:
-            self.remove_from_vis(vis)
-        else:
-            self.add_to_vis(vis)
-        self.visible = not self.visible
+    # geometry_set = dict(pcd=pcd, map_polys=map_polys, pl_polys=[
+    # ], axis_frame=axis_frame, mesh=mesh, frustum=frustum, isec_poly=isec_poly, vis_pcd=True,
+    #     vis_map=True, vis_pl=True, vis_mesh=False, vis_frustum=True, vis_isec=False)
+
+    return vis, geometry_set
+
+
 
     

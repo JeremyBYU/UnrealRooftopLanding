@@ -21,8 +21,8 @@ import cv2
 from airsimcollect.helper.helper_logging import logger
 from airsimcollect.helper.o3d_util import (get_extrinsics, set_view, handle_shapes, update_point_cloud,
                                            translate_meshes, handle_linemeshes, init_vis, clear_polys,
-                                           create_o3d_colored_point_cloud, create_linemesh_from_shapely,
-                                           create_frustum, load_view_point, save_view_point, toggle_visibility)
+                                           update_o3d_colored_point_cloud, create_linemesh_from_shapely,
+                                           update_frustum, load_view_point, save_view_point, toggle_visibility)
 from airsimcollect.helper.helper_mesh import (create_meshes_cuda, update_open_3d_mesh_from_tri_mesh,
                                               decimate_column_opc, get_planar_point_density, map_pd_to_decimate_kernel)
 from airsimcollect.helper.helper_metrics import create_frustum_intersection, select_polygon, select_building
@@ -97,7 +97,7 @@ def load_map(fpath, start_offset_unreal):
 
 
 def extract_polygons(points_all, vis, mesh, all_polys, pl, ga, ico, config,
-                     lidar_beams=64, update_mesh=False, vis_pl=True):
+                     lidar_beams=64):
     points = points_all[:, :3]
     num_cols = int(points.shape[0] / lidar_beams)
     opc = points.reshape((lidar_beams, num_cols, 3))
@@ -115,12 +115,13 @@ def extract_polygons(points_all, vis, mesh, all_polys, pl, ga, ico, config,
                                                                        postprocess=config['polygon']['postprocess'])
     alg_timings.update(timings)
     # 100 ms to plot.... wish we had opengl line-width control
-    all_polys = handle_shapes(vis, planes, all_polys, visible=vis_pl)
+    all_polys.line_meshes = handle_shapes(
+        vis, planes, all_polys.line_meshes, visible=all_polys.visible)
     # isec_polys = intersect_polys()
 
-    if update_mesh:
-        update_open_3d_mesh_from_tri_mesh(mesh, tri_mesh)
-    return all_polys, planes
+    # if update_mesh:
+    #     update_open_3d_mesh_from_tri_mesh(mesh, tri_mesh)
+    return planes
 
 
 def main():
@@ -145,21 +146,19 @@ def main():
                    for features in map_features_dict.values() for feature in features]
     line_meshes = [
         line_mesh for line_mesh_set in line_meshes for line_mesh in line_mesh_set]
-    geometry_set['map_polys'] = handle_linemeshes(
-        vis, geometry_set['map_polys'], line_meshes)
-
-    def toggle_pcd_visibility(vis):
-        toggle_visibility(vis, geometry_set['pcd'], True)
+    geometry_set['map_polys'].line_meshes = handle_linemeshes(
+        vis, geometry_set['map_polys'].line_meshes, line_meshes)
 
     load_view_point(vis, str(o3d_view))
+
     vis.register_key_callback(ord("X"), partial(
-        toggle_visibility, geometry_set, 'vis_pcd', 'pcd'))
+        toggle_visibility, geometry_set, 'pcd'))
     vis.register_key_callback(ord("C"), partial(
-        toggle_visibility, geometry_set, 'vis_map', 'map_polys'))
+        toggle_visibility, geometry_set, 'map_polys'))
     vis.register_key_callback(ord("V"), partial(
-        toggle_visibility, geometry_set, 'vis_pl', 'pl_polys'))
+        toggle_visibility, geometry_set, 'pl_polys'))
     vis.register_key_callback(ord("B"), partial(
-        toggle_visibility, geometry_set, 'vis_frustum', 'frustum'))
+        toggle_visibility, geometry_set, 'frustum'))
     # vis.register_key_callback(ord("C"), toggle_pcd_visibility)
     # vis.register_key_callback(ord("V"), toggle_pcd_visibility)
 
@@ -170,7 +169,8 @@ def main():
                     record['uid'], record['sub_uid'])
         path_key = f"{record['uid']}-{record['sub_uid']}-0"
         bulding_label = record['label']  # building name
-        building_features = map_features_dict[bulding_label] # map feature of the building
+        # map feature of the building
+        building_features = map_features_dict[bulding_label]
         camera_position = Vector3r(
             **record['sensors'][0]['position']).to_numpy_array()
         building_feature = select_building(building_features, camera_position)
@@ -178,9 +178,9 @@ def main():
             camera_position[2]
 
         # Create Frustum
-        geometry_set['frustum'] = create_frustum(vis, distance_to_camera, camera_position,
-                                                 hfov=FOV, vfov=FOV,
-                                                 old_frustum=geometry_set['frustum'], vis_frustum=geometry_set['vis_frustum'])
+        update_frustum(vis, distance_to_camera, camera_position,
+                       hfov=FOV, vfov=FOV,
+                       frustum=geometry_set['frustum'])
 
         # Load Images
         img = cv2.imread(str(scene_paths_dict[path_key]))
@@ -188,23 +188,23 @@ def main():
 
         # Load Lidar Data
         pc_np = np.load(str(lidar_paths_dict[path_key]))
-        pcd = create_o3d_colored_point_cloud(pc_np, geometry_set['pcd'])
+        update_o3d_colored_point_cloud(pc_np, geometry_set['pcd'].geometry)
 
         # Polygon Extraction of surface
-        geometry_set['pl_polys'], pl_planes = extract_polygons(
-            pc_np, vis, geometry_set['mesh'], geometry_set['pl_polys'], pl, ga, ico, config, vis_pl=geometry_set['vis_pl'])
+        pl_planes = extract_polygons(
+            pc_np, vis, geometry_set['mesh'], geometry_set['pl_polys'], pl, ga, ico, config)
 
         # Create 3D shapely polygons of polylidar estimate and "ground truth" surface LIMITED to the sensor field of view of the camera frustum
         pl_poly_estimate = create_frustum_intersection(select_polygon(
-            building_feature, pl_planes), geometry_set['frustum'])
+            building_feature, pl_planes), geometry_set['frustum'].line_meshes[0])
         gt_poly = create_frustum_intersection(
-            building_feature['polygon'], geometry_set['frustum'])
+            building_feature['polygon'], geometry_set['frustum'].line_meshes[0])
 
-        # iou = pl_poly_estimate.intersection(gt_poly).area / pl_poly_estimate.union(gt_poly).area
+        iou = pl_poly_estimate.intersection(gt_poly).area / pl_poly_estimate.union(gt_poly).area
         # print(iou)
 
         # Update geometry and view
-        vis.update_geometry(pcd)
+        vis.update_geometry(geometry_set['pcd'].geometry)
         vis.update_renderer()
         while(True):
             vis.poll_events()

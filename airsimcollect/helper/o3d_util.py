@@ -231,3 +231,44 @@ def toggle_visibility(geometry_set, visibility_key, geometry_key, vis):
         logger.info("Not able to handle this geometry type")
 
     logger.info("Toggled visibility of %s", geometry_key)
+
+
+class VisibleMesh(object):
+    def __init__(self, o3d_mesh, visible=True, name=''):
+        self.o3d_mesh = o3d_mesh
+        self.visible = visible
+        self.name = name
+    
+    def add_to_vis(self, vis):
+        vis.add_geometry(self.o3d_mesh, False)
+
+    def remove_from_vis(self, vis):
+        vis.remove_geometry(self.o3d_mesh, False)
+
+    def toggle_visibility(self, vis):
+        if self.visible:
+            self.remove_from_vis(vis)
+        else:
+            self.add_to_vis(vis)
+        self.visible = not self.visible
+
+class VisibleLineMeshes(object):
+    def __init__(self, line_meshes, visible=True, name=''):
+        self.line_meshes = line_meshes
+        self.visible = visible
+        self.name = name
+    
+    def add_to_vis(self, vis):
+        add_polys(self.line_meshes, vis)
+
+    def remove_from_vis(self, vis):
+        clear_polys(self.line_meshes, vis)
+
+    def toggle_visibility(self, vis):
+        if self.visible:
+            self.remove_from_vis(vis)
+        else:
+            self.add_to_vis(vis)
+        self.visible = not self.visible
+
+    

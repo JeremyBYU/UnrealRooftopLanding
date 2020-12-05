@@ -12,7 +12,7 @@ import yaml
 from rich import print as rprint
 import open3d as o3d
 import numpy as np
-from shapely.geometry import shape
+from shapely.geometry import shape, Polygon
 import shapely
 from airsimcollect.helper.LineMesh import LineMesh
 from airsim.types import Vector3r, Quaternionr
@@ -23,8 +23,9 @@ from airsimcollect.helper.o3d_util import (get_extrinsics, set_view, handle_shap
                                            translate_meshes, handle_linemeshes, init_vis, clear_polys,
                                            create_o3d_colored_point_cloud, create_linemesh_from_shapely,
                                            create_frustum, load_view_point, save_view_point, toggle_visibility)
-from airsimcollect.helper.helper_mesh import (
-    create_meshes_cuda, update_open_3d_mesh_from_tri_mesh, decimate_column_opc, get_planar_point_density, map_pd_to_decimate_kernel)
+from airsimcollect.helper.helper_mesh import (create_meshes_cuda, update_open_3d_mesh_from_tri_mesh,
+                                              decimate_column_opc, get_planar_point_density, map_pd_to_decimate_kernel)
+from airsimcollect.helper.helper_metrics import create_frustum_intersection, select_polygon, select_building
 from airsimcollect.helper.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 
 from fastga import GaussianAccumulatorS2Beta, GaussianAccumulatorS2, IcoCharts
@@ -83,7 +84,8 @@ def load_map(fpath, start_offset_unreal):
         ned_height = -height/100.0 + start_offset_unreal[2] * .01
         # rprint(polygon)
         line_meshes = create_linemesh_from_shapely(polygon, ned_height)
-        centroid = np.array([polygon.centroid.x, polygon.centroid.y])
+        centroid = np.array(
+            [polygon.centroid.x, polygon.centroid.y, ned_height])
         feature_data = dict(ned_height=ned_height, polygon=polygon,
                             line_meshes=line_meshes, class_label=class_label, centroid=centroid)
         if class_label in features:
@@ -118,7 +120,7 @@ def extract_polygons(points_all, vis, mesh, all_polys, pl, ga, ico, config,
 
     if update_mesh:
         update_open_3d_mesh_from_tri_mesh(mesh, tri_mesh)
-    return all_polys
+    return all_polys, planes
 
 
 def main():
@@ -162,16 +164,17 @@ def main():
     # vis.register_key_callback(ord("V"), toggle_pcd_visibility)
 
     for record in records['records']:
-        if record['uid'] < 6:
+        if record['uid'] < 10:
             continue
         logger.info("Inspecting record; UID: %s; SUB-UID: %s",
                     record['uid'], record['sub_uid'])
         path_key = f"{record['uid']}-{record['sub_uid']}-0"
         bulding_label = record['label']  # building name
-        bulding_feature = map_features_dict[bulding_label]
+        building_features = map_features_dict[bulding_label] # map feature of the building
         camera_position = Vector3r(
             **record['sensors'][0]['position']).to_numpy_array()
-        distance_to_camera = bulding_feature[0]['ned_height'] - \
+        building_feature = select_building(building_features, camera_position)
+        distance_to_camera = building_feature['ned_height'] - \
             camera_position[2]
 
         # Create Frustum
@@ -187,13 +190,18 @@ def main():
         pc_np = np.load(str(lidar_paths_dict[path_key]))
         pcd = create_o3d_colored_point_cloud(pc_np, geometry_set['pcd'])
 
-        # Polygon Extraction
-        geometry_set['pl_polys'] = extract_polygons(
+        # Polygon Extraction of surface
+        geometry_set['pl_polys'], pl_planes = extract_polygons(
             pc_np, vis, geometry_set['mesh'], geometry_set['pl_polys'], pl, ga, ico, config, vis_pl=geometry_set['vis_pl'])
-        # print(geometry_set['pl_polys'],geometry_set['vis_pl'] )
 
-        # Load GT Bulding Data
-        # geometry_set['line_meshes'] = handle_shapes(vis, geometry_set['line_meshes'], feature[0]['line_meshes'])
+        # Create 3D shapely polygons of polylidar estimate and "ground truth" surface LIMITED to the sensor field of view of the camera frustum
+        pl_poly_estimate = create_frustum_intersection(select_polygon(
+            building_feature, pl_planes), geometry_set['frustum'])
+        gt_poly = create_frustum_intersection(
+            building_feature['polygon'], geometry_set['frustum'])
+
+        # iou = pl_poly_estimate.intersection(gt_poly).area / pl_poly_estimate.union(gt_poly).area
+        # print(iou)
 
         # Update geometry and view
         vis.update_geometry(pcd)

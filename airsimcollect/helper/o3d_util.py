@@ -103,26 +103,6 @@ def translate_meshes(meshes, shift_x=True):
         x_amt_ += x_amt
         y_amt_ += y_amt
 
-
-# def handle_shapes(vis, planes, obstacles, all_polys, line_radius=0.15, visible=True):
-#     all_polys = clear_polys(all_polys, vis)
-#     for plane, _ in planes:
-#         points = np.array(plane.exterior)
-#         line_mesh = LineMesh(points, colors=GREEN, radius=line_radius)
-#         if visible:
-#             line_mesh.add_line(vis, False)
-#         all_polys.append(line_mesh)
-
-#     for plane, _ in obstacles:
-#         points = np.array(plane.exterior)
-#         line_mesh = LineMesh(points, colors=ORANGE, radius=line_radius)
-#         if visible:
-#             line_mesh.add_line(vis, False)
-#         all_polys.append(line_mesh)
-
-#     return all_polys
-
-
 def handle_shapes(vis, planes, all_polys, line_radius=0.15, visible=True):
     # print(all_polys, visible)
     all_polys = clear_polys(all_polys, vis)
@@ -132,9 +112,6 @@ def handle_shapes(vis, planes, all_polys, line_radius=0.15, visible=True):
         if visible:
             add_polys(lm, vis)
     return all_polys
-
-
-
 
 def handle_linemeshes(vis, old_line_meshes, new_line_meshes):
     all_polys = clear_polys(old_line_meshes, vis)
@@ -155,6 +132,18 @@ def update_o3d_colored_point_cloud(pc_np, pcd=None):
     pc.points = o3d.utility.Vector3dVector(pc_vis[:, :3])
     pc.colors = o3d.utility.Vector3dVector(colors)
     return pc
+
+
+def update_linemesh(polygons, line_meshes):
+    line_meshes.remove_from_vis()
+    all_polys = []
+    for poly_ in polygons:
+        poly = poly_[0] if type(poly_) is tuple else poly_
+        lm = create_linemesh_from_shapely(poly)
+        all_polys.extend(lm)
+    line_meshes.line_meshes = all_polys
+    if line_meshes.visible:
+        line_meshes.add_to_vis()
 
 
 def create_linemesh_from_linear_ring(linear_ring, height=0, line_radius=0.15, rotate_func=None, color=GREEN):
@@ -231,13 +220,13 @@ def init_vis(width=700, height=700):
     # create map
     map_polys = VisibleLineMeshes([], vis, visible=True, name='map_polys')
     # create polylidar polygons
-    pl_polys = VisibleLineMeshes([], vis, visible=True, name='pl_isec')
+    pl_polys = VisibleLineMeshes([], vis, visible=True, name='pl_polys')
     # Create a mesh
     # Create a LineMesh for the Frustum
     frustum = VisibleLineMeshes([], vis, visible=True, name='frustum')
     # Create a Line Mesh for the interstion of the Frustum and predicted polygons
-    pl_isec = VisibleLineMeshes([], vis, visible=True, name='pl_isec')
-    gt_isec = VisibleLineMeshes([], vis, visible=True, name='gt_isec')
+    pl_isec = VisibleLineMeshes([], vis, visible=False, name='pl_isec')
+    gt_isec = VisibleLineMeshes([], vis, visible=False, name='gt_isec')
 
     # add geometries
     vis.add_geometry(axis_frame)

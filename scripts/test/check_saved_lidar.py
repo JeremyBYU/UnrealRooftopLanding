@@ -19,12 +19,10 @@ from airsim.types import Vector3r, Quaternionr
 import cv2
 
 from airsimcollect.helper.helper_logging import logger
-from airsimcollect.helper.o3d_util import (get_extrinsics, set_view, handle_shapes, update_point_cloud,
-                                           translate_meshes, handle_linemeshes, init_vis, clear_polys,
+from airsimcollect.helper.o3d_util import (update_linemesh, handle_linemeshes, init_vis,
                                            update_o3d_colored_point_cloud, create_linemesh_from_shapely,
                                            update_frustum, load_view_point, save_view_point, toggle_visibility)
-from airsimcollect.helper.helper_mesh import (create_meshes_cuda, update_open_3d_mesh_from_tri_mesh,
-                                              decimate_column_opc, get_planar_point_density, map_pd_to_decimate_kernel)
+from airsimcollect.helper.helper_mesh import (create_meshes_cuda, update_open_3d_mesh_from_tri_mesh)
 from airsimcollect.helper.helper_metrics import create_frustum_intersection, select_polygon, select_building
 from airsimcollect.helper.helper_polylidar import extract_all_dominant_plane_normals, extract_planes_and_polygons_from_mesh
 
@@ -41,7 +39,6 @@ o3d_view = Path(
     r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\assets\o3d\o3d_view_default.json")
 
 FOV = 90
-
 
 def convert_dict(directory, suffix='.'):
     return {f.split('.')[0]: directory / f for f in listdir(directory)}
@@ -109,18 +106,14 @@ def extract_polygons(points_all, vis, mesh, all_polys, pl, ga, ico, config,
     avg_peaks, _, _, _, timings = extract_all_dominant_plane_normals(
         tri_mesh, ga_=ga, ico_chart_=ico, **config['fastga'])
     alg_timings.update(timings)
+    avg_peaks = avg_peaks[:1, :] # only looking for most dominant plane
     # 3. Extract Planes and Polygons
     planes, obstacles, timings = extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks, pl_=pl,
                                                                        filter_polygons=True, optimized=True,
                                                                        postprocess=config['polygon']['postprocess'])
     alg_timings.update(timings)
     # 100 ms to plot.... wish we had opengl line-width control
-    all_polys.line_meshes = handle_shapes(
-        vis, planes, all_polys.line_meshes, visible=all_polys.visible)
-    # isec_polys = intersect_polys()
-
-    # if update_mesh:
-    #     update_open_3d_mesh_from_tri_mesh(mesh, tri_mesh)
+    update_linemesh(planes, all_polys)
     return planes
 
 
@@ -140,7 +133,7 @@ def main():
     ga = GaussianAccumulatorS2Beta(level=config['fastga']['level'])
     ico = IcoCharts(level=config['fastga']['level'])
 
-    # Initialize 3D Viewer and Map
+    # Initialize 3D Viewer, Map and Misc geometries
     vis, geometry_set = init_vis()
     line_meshes = [feature['line_meshes']
                    for features in map_features_dict.values() for feature in features]
@@ -148,7 +141,6 @@ def main():
         line_mesh for line_mesh_set in line_meshes for line_mesh in line_mesh_set]
     geometry_set['map_polys'].line_meshes = handle_linemeshes(
         vis, geometry_set['map_polys'].line_meshes, line_meshes)
-
     load_view_point(vis, str(o3d_view))
 
     vis.register_key_callback(ord("X"), partial(
@@ -159,16 +151,22 @@ def main():
         toggle_visibility, geometry_set, 'pl_polys'))
     vis.register_key_callback(ord("B"), partial(
         toggle_visibility, geometry_set, 'frustum'))
-    # vis.register_key_callback(ord("C"), toggle_pcd_visibility)
-    # vis.register_key_callback(ord("V"), toggle_pcd_visibility)
+    vis.register_key_callback(ord("N"), partial(
+        toggle_visibility, geometry_set, 'pl_isec'))
+    vis.register_key_callback(ord("M"), partial(
+        toggle_visibility, geometry_set, 'gt_isec'))
 
     for record in records['records']:
-        if record['uid'] < 10:
+        if record['uid']  == 26:
+            logger.warn("Skipping record; UID: %s; SUB-UID: %s; Building Name: %s. Rooftop assets dont match map. Rooftop assets randomness wasn't fixed on this asset!")
             continue
-        logger.info("Inspecting record; UID: %s; SUB-UID: %s",
-                    record['uid'], record['sub_uid'])
+        # if record['uid'] < 40:
+        #     continue
+        
         path_key = f"{record['uid']}-{record['sub_uid']}-0"
         bulding_label = record['label']  # building name
+        logger.info("Inspecting record; UID: %s; SUB-UID: %s; Building Name: %s",
+                    record['uid'], record['sub_uid'], bulding_label)
         # map feature of the building
         building_features = map_features_dict[bulding_label]
         camera_position = Vector3r(
@@ -183,7 +181,9 @@ def main():
                        frustum=geometry_set['frustum'])
 
         # Load Images
-        img = cv2.imread(str(scene_paths_dict[path_key]))
+        img_scene = cv2.imread(str(scene_paths_dict[path_key]))
+        img_seg = cv2.imread(str(segmentation_paths_dict[path_key]))
+        img = np.concatenate((img_scene, img_seg), axis=1)
         cv2.imshow('Scene View'.format(record['uid']), img)
 
         # Load Lidar Data
@@ -194,15 +194,22 @@ def main():
         pl_planes = extract_polygons(
             pc_np, vis, geometry_set['mesh'], geometry_set['pl_polys'], pl, ga, ico, config)
 
-        # Create 3D shapely polygons of polylidar estimate and "ground truth" surface LIMITED to the sensor field of view of the camera frustum
-        pl_poly_estimate = create_frustum_intersection(select_polygon(
-            building_feature, pl_planes), geometry_set['frustum'].line_meshes[0])
-        gt_poly = create_frustum_intersection(
-            building_feature['polygon'], geometry_set['frustum'].line_meshes[0])
+        if pl_planes:
+            # Create 3D shapely polygons of polylidar estimate and "ground truth" surface LIMITED to the sensor field of view of the camera frustum
+            pl_poly_estimate = create_frustum_intersection(select_polygon(
+                building_feature, pl_planes), geometry_set['frustum'].line_meshes[0])
+            gt_poly = create_frustum_intersection(
+                building_feature['polygon'], geometry_set['frustum'].line_meshes[0])
 
-        iou = pl_poly_estimate.intersection(gt_poly).area / pl_poly_estimate.union(gt_poly).area
-        # print(iou)
-
+            # Visualize these intersections
+            update_linemesh([pl_poly_estimate], geometry_set['pl_isec'])
+            update_linemesh([gt_poly], geometry_set['gt_isec'])
+            iou = pl_poly_estimate.intersection(
+                gt_poly).area / pl_poly_estimate.union(gt_poly).area
+            logger.info("Polylidar3D IOU - %.1f", iou * 100)
+        else:
+            update_linemesh([], geometry_set['pl_isec'])
+            update_linemesh([], geometry_set['gt_isec'])
         # Update geometry and view
         vis.update_geometry(geometry_set['pcd'].geometry)
         vis.update_renderer()

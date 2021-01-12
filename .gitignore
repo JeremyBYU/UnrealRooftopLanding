@@ -1,7 +1,8 @@
 assets/collectionpoints/*.npy
 AirSimCollectData
-assets/maps/*.txt
-assets/maps/*.npy
+assets/maps/**/*.txt
+assets/maps/**/*.npy
+assets/maps/archive
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

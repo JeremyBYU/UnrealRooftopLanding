@@ -123,7 +123,6 @@ def handle_linemeshes(vis, old_line_meshes, new_line_meshes):
 def update_o3d_colored_point_cloud(pc_np, pcd=None):
     pc_vis = remove_nans(pc_np)
     label = pc_vis[:, 3].astype(np.int)
-
     colors = colors_mapping(label)[:, :3]
     if pcd is not None:
         pc = pcd
@@ -168,10 +167,20 @@ def create_linemesh_from_shapely(polygon, height=0, line_radius=0.15, rotate_fun
 
 
 def update_frustum(vis, dist_to_plane=5.0, start_pos=np.array([0.0, 0.0, 0.0]), hfov=90, vfov=90,
-                   frustum:VisibleLineMeshes=None, radius=0.15, color=[1, 0, 0], vis_frustum=True):
+                   frustum:VisibleLineMeshes=None, radius=0.15, color=[1, 0, 0]):
     
     frustum.remove_from_vis()
 
+    points = create_frustum(dist_to_plane, start_pos, hfov, vfov)
+    lines = [[0, 1], [0, 2], [0, 3], [0, 4],
+             [1, 2], [2, 3], [3, 4], [4, 1]]
+
+    frustum.line_meshes = [LineMesh(points, lines, colors=color, radius=radius)]
+    if frustum.visible:
+        frustum.add_to_vis()
+
+
+def create_frustum(dist_to_plane=5.0, start_pos=np.array([0.0, 0.0, 0.0]), hfov=90, vfov=90):
     x = np.tan(np.radians(hfov/2.0)) * dist_to_plane
     y = np.tan(np.radians(vfov/2.0)) * dist_to_plane
 
@@ -181,12 +190,8 @@ def update_frustum(vis, dist_to_plane=5.0, start_pos=np.array([0.0, 0.0, 0.0]), 
     point3 = start_pos - [-x, -y, -dist_to_plane]
     point4 = start_pos - [x, -y, -dist_to_plane]
     points = np.stack([point0, point1, point2, point3, point4])
-    lines = [[0, 1], [0, 2], [0, 3], [0, 4],
-             [1, 2], [2, 3], [3, 4], [4, 1]]
 
-    frustum.line_meshes = [LineMesh(points, lines, colors=color, radius=radius)]
-    if frustum.visible:
-        frustum.add_to_vis()
+    return points
 
 
 def save_view_point(vis, filename=r"C:\Users\Jeremy\Documents\UMICH\Research\UnrealRooftopLanding\assets\o3d\o3d_view_default.json"):
@@ -240,6 +245,20 @@ def init_vis(width=700, height=700):
     #     vis_map=True, vis_pl=True, vis_mesh=False, vis_frustum=True, vis_isec=False)
 
     return vis, geometry_set
+
+
+class DummyVis(object):
+    def __init__(self):
+        pass
+    
+    def register_key_callback(self, *args, **kwargs):
+        pass
+
+    def add_geometry(self, *args, **kwargs):
+        pass
+
+    def remove_geometry(self, *args, **kwargs):
+        pass
 
 
 

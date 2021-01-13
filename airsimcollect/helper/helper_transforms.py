@@ -39,7 +39,7 @@ def transform_to_cam(points, cam_pos=lidar_to_camera_pos, cam_quat=lidar_to_came
     if points_in_unreal:
         # Need to scale down to meters
         points[:3, :] = points[:3, :] / 100.0
-        # Need to convert to NED coordinate for homogoneous transformation matrix
+        # Need to convert to NED coordinate for homogeneous transformation matrix
         temp = points.copy()
         points[0, :], points[1, :], points[2,
                                            :] = temp[0, :], temp[1, :], -temp[2, :]
@@ -85,8 +85,9 @@ def project_points_img(points, proj_mat, width, height, points_orig):
 
 def get_transforms(img_meta, airsim_settings):
     cam_ori = img_meta['rotation']
-    cam_quat = np.quaternion(cam_ori.w_val, cam_ori.x_val,
-                             cam_ori.y_val, cam_ori.z_val)
+    cam_quat = cam_ori if isinstance(cam_ori, np.quaternion) else np.quaternion(cam_ori.w_val, cam_ori.x_val, cam_ori.y_val, cam_ori.z_val)
+    # cam_quat = np.quaternion(cam_ori.w_val, cam_ori.x_val,
+    #                          cam_ori.y_val, cam_ori.z_val)
     cam_pos = img_meta['position']
     if airsim_settings['lidar_local_frame']:
         transform_pos = airsim_settings['lidar_to_camera_pos']
@@ -97,9 +98,22 @@ def get_transforms(img_meta, airsim_settings):
         transform_rot = airsim_settings['lidar_to_camera_quat'] * \
             cam_quat.conjugate()
         invert = True
-
     return transform_pos, transform_rot, invert
 
+def get_pixels_from_points(points, img_meta, airsim_settings):
+    height = img_meta['height']
+    width = img_meta['width']
+    transform_pos, transform_rot, invert = get_transforms(
+        img_meta, airsim_settings)
+
+    proj_mat = create_projection_matrix(height, width)
+    # Transform NED points to camera coordinate system (not NED)
+    points_transformed = transform_to_cam(
+        points, cam_pos=transform_pos, cam_quat=transform_rot, invert=invert, points_in_unreal=False)
+    # Project Points into image, filter points outside of image
+    pixels, mask = project_points_img(
+        points_transformed, proj_mat, width, height, points)
+    return pixels, mask
 
 def classify_points(img, points, img_meta, airsim_settings):
     height = img_meta['height']
@@ -195,14 +209,21 @@ def get_seg2rgb_map(number_of_classes=None, cmap_file=SEG_RGB_FILE, normalized=T
 
 
 def colors2class(colors, seg2rgb_map):
-    n_points = colors.shape[0]
-    classes = np.zeros((n_points,), dtype=np.uint8)
-    # import ipdb; ipdb.set_trace()
-    columns = colors.shape[1]
-    for code, color in seg2rgb_map.items():
-        mask = (colors == color[:columns])[:, 0]
-        classes[mask] = int(code)
-    return classes
+    if colors.ndim == 2:
+        n_points = colors.shape[0]
+        classes = np.zeros((n_points,), dtype=np.uint8)
+        columns = colors.shape[1]
+        for code, color in seg2rgb_map.items():
+            mask = (colors == color[:columns])[:, 0]
+            classes[mask] = int(code)
+        return classes
+    elif colors.ndim == 3:
+        classes = np.zeros((*colors.shape[:2],), dtype=np.uint8)
+        channels = colors.shape[2]
+        for code, color in seg2rgb_map.items():
+            mask = np.all(colors == color[:channels], axis=-1)
+            classes[mask] = int(code)
+        return classes
 
 
 def project_ned_points(points, img_meta):

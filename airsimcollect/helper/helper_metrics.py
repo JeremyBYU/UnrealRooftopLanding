@@ -1,6 +1,27 @@
 import numpy as np
 from shapely.geometry import Polygon
+from pathlib import Path
+from os import listdir
+import json
 
+def convert_dict(directory, suffix='.'):
+    return {f.split('.')[0]: directory / f for f in listdir(directory)}
+
+
+def load_records(directory):
+    lidar_directory = directory / Path("Lidar")
+    scene_directory = directory / Path("Scene")
+    segmentation_directory = directory / Path("Segmentation")
+    records_path = directory / 'records.json'
+
+    with open(records_path) as f:
+        records = json.load(f)
+
+    lidar_paths_dict = convert_dict(lidar_directory)
+    scene_paths_dict = convert_dict(scene_directory)
+    segmentation_paths_dict = convert_dict(segmentation_directory)
+
+    return records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict
 
 def choose_dominant_plane_normal(avg_peaks, rooftop_normal=[0.0, 0.0, -1.0]):
     dots = np.array([avg_peaks[i, :].dot(rooftop_normal) for i in range(avg_peaks.shape[0])])

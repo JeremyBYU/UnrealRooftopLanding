@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 from skimage.transform import rescale
 from astropy.convolution import convolve, Box2DKernel
-from airsimcollect.helper.helper_transforms import colors2class, get_pixels_from_points
+from airsimcollect.helper.helper_transforms import colors2class, get_pixels_from_points, get_transforms, create_homogenous_transform, create_projection_matrix
 
 
 def create_fake_confidence_map_seg(img_seg, seg2rgb_map, ds=4, roof_class=4):
@@ -21,13 +21,26 @@ def create_fake_confidence_map_seg(img_seg, seg2rgb_map, ds=4, roof_class=4):
     return classes
 
 
-def create_confidence_map_planarity(tri_mesh, img_meta, airsim_settings, ds=4):
+def get_homogenous_projection_matrices(img_meta, airsim_settings, ds=4):
+    img_meta_copy = dict(**img_meta)
     shape = np.array(
         (img_meta['height'], img_meta['width']), dtype=np.int) // ds
-    img_meta['height'] = shape[0]
-    img_meta['width'] = shape[1]
+    img_meta_copy['height'] = shape[0]
+    img_meta_copy['width'] = shape[1]
+    transform_pos, transform_rot, invert = get_transforms(img_meta_copy, airsim_settings)
+    hom_transform = create_homogenous_transform(cam_pos=transform_pos, cam_quat=transform_rot, invert=invert)
+    proj_mat = create_projection_matrix(img_meta_copy['height'], img_meta_copy['width'])
+
+    return hom_transform, proj_mat
+
+def create_confidence_map_planarity(tri_mesh, img_meta, airsim_settings, ds=4):
+    img_meta_copy = dict(**img_meta)
+    shape = np.array(
+        (img_meta['height'], img_meta['width']), dtype=np.int) // ds
+    img_meta_copy['height'] = shape[0]
+    img_meta_copy['width'] = shape[1]
     conf_map_plan = np.full(
-        (img_meta['height'], img_meta['width']), np.nan, dtype=np.float32)
+        (img_meta_copy['height'], img_meta_copy['width']), np.nan, dtype=np.float32)
     box_kernel = Box2DKernel(3)
     t1 = time.perf_counter()
     triangles_np = np.asarray(tri_mesh.triangles)
@@ -41,7 +54,7 @@ def create_confidence_map_planarity(tri_mesh, img_meta, airsim_settings, ds=4):
     t4 = time.perf_counter()
     #
     pixels, mask = get_pixels_from_points(
-        triangle_centroids, img_meta, airsim_settings) # slow
+        triangle_centroids, img_meta_copy, airsim_settings) # slow
     t5 = time.perf_counter()
     triangles_planarity_filt = np.squeeze(triangles_planarity[mask, :])
     t6 = time.perf_counter()

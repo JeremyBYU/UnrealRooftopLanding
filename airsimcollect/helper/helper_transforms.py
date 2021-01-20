@@ -89,11 +89,19 @@ def get_transforms(img_meta, airsim_settings):
     # cam_quat = np.quaternion(cam_ori.w_val, cam_ori.x_val,
     #                          cam_ori.y_val, cam_ori.z_val)
     cam_pos = img_meta['position']
+    # lidar_to_camera_quat start off as
+    #       * the rotation from LIDAR frame, to a CAMERA frame (x=forward -> x=right, z=down(ned) -> z=forward, y=right->y=down), 
+    #       * If the point cloud data is in the LIDAR frame, then lidar_to_camera_quat will ALSO be rotated such that roll,pitch,yaw offsets between sensors will be taken into account.
+    #       * See helper.py Line 131
+
     if airsim_settings['lidar_local_frame']:
+        # Point cloud is in lidar local frame, transforms already 
         transform_pos = airsim_settings['lidar_to_camera_pos']
         transform_rot = airsim_settings['lidar_to_camera_quat']
         invert = False
     else:
+        # The data is already in the NED frame
+        # Note that the NED frame axis corresponds to the Lidar Frame axes, so we can reuse `lidar_to_camera_quat`
         transform_pos = cam_pos
         transform_rot = airsim_settings['lidar_to_camera_quat'] * \
             cam_quat.conjugate()

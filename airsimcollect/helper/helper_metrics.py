@@ -1,11 +1,60 @@
 import numpy as np
 from shapely.geometry import Polygon
 from pathlib import Path
+from shapely.geometry import shape, Polygon
 from os import listdir
 import json
+import shapely
+
+from airsimcollect.helper.o3d_util import create_linemesh_from_shapely
 
 def convert_dict(directory, suffix='.'):
     return {f.split('.')[0]: directory / f for f in listdir(directory)}
+
+
+def compute_metric(building_feature, pl_planes, frustum_points):
+    # Create 3D shapely polygons of polylidar estimate and "ground truth" surface LIMITED to the sensor field of view of the camera frustum
+    pl_poly_estimate = create_frustum_intersection(select_polygon(
+        building_feature, pl_planes), frustum_points)
+    gt_poly = create_frustum_intersection(
+        building_feature['polygon'], frustum_points)
+
+    base_iou = pl_poly_estimate.intersection(
+        gt_poly).area / pl_poly_estimate.union(gt_poly).area
+
+    return base_iou, pl_poly_estimate, gt_poly
+
+def load_map(fpath, start_offset_unreal):
+    """Attempts to load a polygon geojson file"""
+    with open(fpath) as f:
+        poly_geojson = json.load(f)
+    # print(poly_geojson)
+    features = dict()
+    for feature in poly_geojson['features']:
+        # in the unreal coordiante systems
+        # rprint(feature)
+        height = feature['properties']['height']
+        class_label = feature['properties']['class_label']
+        polygon = shape(feature['geometry'])
+        # translate the polygon to make make UCF coincide with NED
+        polygon = shapely.affinity.translate(
+            polygon, *(-1 * start_offset_unreal).tolist())
+        # Scale polgyon from cm to meters
+        polygon = shapely.affinity.scale(
+            polygon, xfact=0.01, yfact=0.01, zfact=0.01, origin=(0, 0, 0))
+        ned_height = -height/100.0 + start_offset_unreal[2] * .01
+        # rprint(polygon)
+        line_meshes = create_linemesh_from_shapely(polygon, ned_height)
+        centroid = np.array(
+            [polygon.centroid.x, polygon.centroid.y, ned_height])
+        feature_data = dict(ned_height=ned_height, polygon=polygon,
+                            line_meshes=line_meshes, class_label=class_label, centroid=centroid)
+        if class_label in features:
+            features[class_label].append(feature_data)
+        else:
+            features[class_label] = [feature_data]
+
+    return features
 
 
 def load_records(directory):

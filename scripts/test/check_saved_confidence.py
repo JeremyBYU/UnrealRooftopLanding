@@ -29,8 +29,16 @@ from airsimcollect.helper.helper_logging import logger
 from airsimcollect.helper.helper_transforms import get_seg2rgb_map
 
 from airsimcollect.helper.helper_mesh import (create_meshes_cuda)
-from airsimcollect.helper.helper_metrics import load_records
-from airsimcollect.helper.helper_confidence_maps import create_fake_confidence_map_seg, create_confidence_map_planarity, create_confidence_map_combined
+from airsimcollect.helper.helper_metrics import load_records, select_building, load_map, compute_metric
+from airsimcollect.helper.o3d_util import create_frustum
+from airsimcollect.helper.helper_confidence_maps import (create_fake_confidence_map_seg,
+                                                         create_confidence_map_planarity,
+                                                         create_confidence_map_combined,
+                                                         get_homogenous_projection_matrices)
+from airsimcollect.helper.helper_polylidar import extract_polygons
+
+from fastga import GaussianAccumulatorS2Beta, IcoCharts
+from polylidar import Polylidar3D
 
 ROOT_DIR = Path(__file__).parent.parent.parent
 SAVED_DATA_DIR = ROOT_DIR / 'AirSimCollectData/LidarRoofManualTest'
@@ -61,10 +69,24 @@ def update_state(record, position='position', rotation='rotation'):
     record[rotation] = np.quaternion(*rotation_data)
 
 
+def get_polygon_inside_frustum(pc_np, pl, ga, ico, config, distance_to_camera, camera_position, building_feature):
+
+    frustum_points = create_frustum(
+        distance_to_camera, camera_position, hfov=FOV, vfov=FOV)
+    pl_planes, alg_timings, tri_mesh = extract_polygons(
+        pc_np, None, pl, ga, ico, config, segmented=True)
+    seg_gt_iou, pl_poly_estimate_seg, gt_poly = compute_metric(
+        building_feature, pl_planes, frustum_points)
+
+    return tri_mesh, pl_planes, pl_poly_estimate_seg, gt_poly
+
+
 def main(gui=True, segmented=False):
     records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict = load_records(
         SAVED_DATA_DIR)
     airsim_settings = records['airsim_settings']
+
+    # have to turn some json keys into proper objects, quaternions...
     update_state(airsim_settings, position='lidar_to_camera_pos',
                  rotation='lidar_to_camera_quat')
 
@@ -72,6 +94,15 @@ def main(gui=True, segmented=False):
     # Load yaml file
     with open('./assets/config/PolylidarParams.yaml') as file:
         config = yaml.safe_load(file)
+
+    start_offset_unreal = np.array(records['start_offset_unreal'])
+    map_features_dict = load_map(GEOSON_MAP, start_offset_unreal)
+
+    # Create Polylidar Objects
+    pl = Polylidar3D(**config['polylidar'])
+    ga = GaussianAccumulatorS2Beta(level=config['fastga']['level'])
+    ico = IcoCharts(level=config['fastga']['level'])
+
     for record in records['records']:
         path_key = f"{record['uid']}-{record['sub_uid']}-0"
         bulding_label = record['label']  # building name
@@ -80,9 +111,18 @@ def main(gui=True, segmented=False):
                         record['uid'], record['sub_uid'], bulding_label)
             continue
         # uid #45 is best segmentation example
-        if record['uid'] < 100:
+        if record['uid'] < 10:
             continue
 
+        # map feature of the building
+        building_features = map_features_dict[bulding_label]
+        camera_position = Vector3r(
+            **record['sensors'][0]['position']).to_numpy_array()
+        building_feature = select_building(building_features, camera_position)
+        distance_to_camera = building_feature['ned_height'] - \
+            camera_position[2]
+
+        # have to turn some json keys into proper objects, quaternions...
         img_meta = record['sensors'][0]
         update_state(img_meta)
 
@@ -97,7 +137,9 @@ def main(gui=True, segmented=False):
 
         conf_map_seg = create_fake_confidence_map_seg(img_seg, seg2rgb_map)
 
-        _, tri_mesh = extract_mesh(pc_np, config)
+        tri_mesh, pl_planes, pl_poly_estimate_seg, gt_poly = get_polygon_inside_frustum(
+            pc_np, pl, ga, ico, config, distance_to_camera, camera_position, building_feature)
+
         t1 = time.perf_counter()
         conf_map_plan = create_confidence_map_planarity(
             tri_mesh, img_meta, airsim_settings)
@@ -114,6 +156,11 @@ def main(gui=True, segmented=False):
         img_scene = np.concatenate((img_scene, img_seg), axis=1)
         img_conf = np.concatenate(
             (conf_map_seg_color, conf_map_plan_color, conf_map_comb_color), axis=1)
+
+        hom, proj = get_homogenous_projection_matrices(
+            img_meta, airsim_settings)
+
+        
 
         cv2.imshow('Scene View', img_scene)
         cv2.imshow('Confidence View', img_conf)

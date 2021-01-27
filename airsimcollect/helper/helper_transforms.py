@@ -83,6 +83,12 @@ def project_points_img(points, proj_mat, width, height, points_orig):
     return pixels, mask
 
 
+def affine_points_pixels(points, affine):
+    pixels = points[:,:2] - [affine[0, 0], affine[0, 1]]
+    pixels = pixels / affine[0,2]
+    pixels = np.floor(pixels).astype(np.int)
+    return pixels
+
 def get_transforms(img_meta, airsim_settings):
     cam_ori = img_meta['rotation']
     cam_quat = cam_ori if isinstance(cam_ori, np.quaternion) else np.quaternion(cam_ori.w_val, cam_ori.x_val, cam_ori.y_val, cam_ori.z_val)

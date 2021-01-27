@@ -9,6 +9,7 @@ from os import listdir
 from os.path import isfile, join
 from functools import partial
 import argparse
+import joblib
 
 import yaml
 import quaternion
@@ -24,6 +25,8 @@ import cv2
 import pandas as pd
 import matplotlib.cm as cm
 from skimage.transform import resize, rescale
+from descartes import PolygonPatch
+import matplotlib.pyplot as plt
 
 from airsimcollect.helper.helper_logging import logger
 from airsimcollect.helper.helper_transforms import get_seg2rgb_map
@@ -34,7 +37,9 @@ from airsimcollect.helper.o3d_util import create_frustum
 from airsimcollect.helper.helper_confidence_maps import (create_fake_confidence_map_seg,
                                                          create_confidence_map_planarity,
                                                          create_confidence_map_combined,
-                                                         get_homogenous_projection_matrices)
+                                                         get_homogenous_projection_matrices,
+                                                         create_bbox_raster_from_polygon,
+                                                         create_confidence_map_planarity2)
 from airsimcollect.helper.helper_polylidar import extract_polygons
 
 from fastga import GaussianAccumulatorS2Beta, IcoCharts
@@ -73,12 +78,14 @@ def get_polygon_inside_frustum(pc_np, pl, ga, ico, config, distance_to_camera, c
 
     frustum_points = create_frustum(
         distance_to_camera, camera_position, hfov=FOV, vfov=FOV)
-    pl_planes, alg_timings, tri_mesh = extract_polygons(
+    pl_planes, alg_timings, tri_mesh, avg_peaks = extract_polygons(
         pc_np, None, pl, ga, ico, config, segmented=True)
-    seg_gt_iou, pl_poly_estimate_seg, gt_poly = compute_metric(
-        building_feature, pl_planes, frustum_points)
-
-    return tri_mesh, pl_planes, pl_poly_estimate_seg, gt_poly
+    if pl_planes:
+        seg_gt_iou, pl_poly_estimate_seg, gt_poly = compute_metric(
+            building_feature, pl_planes, frustum_points)
+        return tri_mesh, avg_peaks, pl_poly_estimate_seg, gt_poly
+    else:
+        return None, None, None, None
 
 
 def main(gui=True, segmented=False):
@@ -111,7 +118,7 @@ def main(gui=True, segmented=False):
                         record['uid'], record['sub_uid'], bulding_label)
             continue
         # uid #45 is best segmentation example
-        if record['uid'] < 10:
+        if record['uid'] < 0:
             continue
 
         # map feature of the building
@@ -135,36 +142,52 @@ def main(gui=True, segmented=False):
         # Load LiDAR Data
         pc_np = np.load(str(lidar_paths_dict[path_key]))
 
-        conf_map_seg = create_fake_confidence_map_seg(img_seg, seg2rgb_map)
 
-        tri_mesh, pl_planes, pl_poly_estimate_seg, gt_poly = get_polygon_inside_frustum(
+        tri_mesh, avg_peaks, pl_poly_estimate_seg, gt_poly = get_polygon_inside_frustum(
             pc_np, pl, ga, ico, config, distance_to_camera, camera_position, building_feature)
-
-        t1 = time.perf_counter()
-        conf_map_plan = create_confidence_map_planarity(
-            tri_mesh, img_meta, airsim_settings)
-        t2 = time.perf_counter()
-        conf_map_comb = create_confidence_map_combined(
-            conf_map_seg, conf_map_plan)
-
-        conf_map_seg_color = cm.viridis(
-            conf_map_seg)[:, :, :3][..., ::-1].copy()
-        conf_map_plan_color = cm.viridis(conf_map_plan)[
-            :, :, :3][..., ::-1].copy()
-        conf_map_comb_color = cm.viridis(conf_map_comb)[
-            :, :, :3][..., ::-1].copy()
-        img_scene = np.concatenate((img_scene, img_seg), axis=1)
-        img_conf = np.concatenate(
-            (conf_map_seg_color, conf_map_plan_color, conf_map_comb_color), axis=1)
-
-        hom, proj = get_homogenous_projection_matrices(
-            img_meta, airsim_settings)
+        
+        if tri_mesh is None:
+            continue
 
         
+        fig, ax = plt.subplots(nrows=1, ncols=2)
+        ax[1].add_patch(PolygonPatch(pl_poly_estimate_seg, ec='k', alpha=0.5, zorder=2),)
+        ax[1].autoscale_view()
+        ax[1].axis('equal')
 
-        cv2.imshow('Scene View', img_scene)
-        cv2.imshow('Confidence View', img_conf)
-        res = cv2.waitKey(0)
+        raster = create_confidence_map_planarity2(tri_mesh, pl_poly_estimate_seg)
+        ax[0].imshow(raster, origin='lower')
+
+        plt.show()
+
+
+        # conf_map_seg = create_fake_confidence_map_seg(img_seg, seg2rgb_map)
+        # t1 = time.perf_counter()
+        # conf_map_plan = create_confidence_map_planarity(
+        #     tri_mesh, img_meta, airsim_settings)
+        # t2 = time.perf_counter()
+        # conf_map_comb = create_confidence_map_combined(
+        #     conf_map_seg, conf_map_plan)
+
+        # conf_map_seg_color = cm.viridis(
+        #     conf_map_seg)[:, :, :3][..., ::-1].copy()
+        # conf_map_plan_color = cm.viridis(conf_map_plan)[
+        #     :, :, :3][..., ::-1].copy()
+        # conf_map_comb_color = cm.viridis(conf_map_comb)[
+        #     :, :, :3][..., ::-1].copy()
+        # img_scene = np.concatenate((img_scene, img_seg), axis=1)
+        # img_conf = np.concatenate(
+        #     (conf_map_seg_color, conf_map_plan_color, conf_map_comb_color), axis=1)
+
+        # hom, proj = get_homogenous_projection_matrices(
+        #     img_meta, airsim_settings)
+
+        # data = dict(hom=hom, proj=proj, conf_map_comb=conf_map_comb, conf_map_plan=conf_map_plan, conf_map_seg_gt=conf_map_seg,
+        #             poly=pl_poly_estimate_seg, poly_normal=avg_peaks, lidar_local_frame=airsim_settings['lidar_local_frame'])
+        # joblib.dump(data, SAVED_DATA_DIR / 'Processed' / (path_key[:-2] + '.pkl'), compress=True)
+        # cv2.imshow('Scene View', img_scene)
+        # cv2.imshow('Confidence View', img_conf)
+        # res = cv2.waitKey(0)
 
 
 def parse_args():

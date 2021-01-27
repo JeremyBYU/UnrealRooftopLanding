@@ -263,4 +263,4 @@ def extract_polygons(points_all, all_polys, pl, ga, ico, config,
     # 100 ms to plot.... wish we had opengl line-width control
     if all_polys is not None:
         update_linemesh(planes, all_polys)
-    return planes, alg_timings, tri_mesh
+    return planes, alg_timings, tri_mesh, avg_peaks

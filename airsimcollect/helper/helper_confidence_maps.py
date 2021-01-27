@@ -10,12 +10,15 @@ from shapely.geometry import Polygon
 
 def create_fake_confidence_map_seg(img_seg, seg2rgb_map, ds=4, roof_class=4):
     img_seg_rgb = cv2.cvtColor(img_seg, cv2.COLOR_BGR2RGB)
-    img_seg_rgb_ = rescale(img_seg_rgb, 1 / ds, multichannel=True,
-                           mode='edge',
-                           anti_aliasing=False,
-                           anti_aliasing_sigma=None,
-                           preserve_range=True,
-                           order=0)
+    if ds != 1:
+        img_seg_rgb_ = rescale(img_seg_rgb, 1 / ds, multichannel=True,
+                            mode='edge',
+                            anti_aliasing=False,
+                            anti_aliasing_sigma=None,
+                            preserve_range=True,
+                            order=0)
+    else:
+        img_seg_rgb_ = img_seg_rgb
     classes = colors2class(img_seg_rgb_, seg2rgb_map).astype(np.float32)
     classes[classes != roof_class] = 0.0
     classes[classes == roof_class] = 1.0
@@ -107,6 +110,11 @@ def extended_bounding_box_polygon(poly: Polygon):
     points = np.asarray(poly.exterior)
     return extended_bounding_box_points(points)
 
+def create_affine_from_polygon(poly:Polygon, resolution=0.20):
+    bbox = bounding_box_polygon(poly)
+    affine = np.array([[bbox[0], bbox[2], resolution, resolution]], dtype=np.float64)
+    return affine, bbox
+
 def create_bbox_raster_from_polygon(poly:shapely, resolution=0.20):
     bbox = bounding_box_polygon(poly)
     size_world = [bbox[1] - bbox[0], bbox[3] - bbox[2]]
@@ -122,29 +130,65 @@ def create_bbox_raster_from_polygon(poly:shapely, resolution=0.20):
 
     return raster, affine
 
-def create_confidence_map_planarity2(tri_mesh, poly):
-    box_kernel = Box2DKernel(3)
-    raster, affine = create_bbox_raster_from_polygon(poly)
+def create_raster_from_bbox(bbox, resolution=0.20):
+    size_world = [bbox[1] - bbox[0], bbox[3] - bbox[2]]
+    size_pixels = [int(size_world[1] / resolution) + 1, int(size_world[0] / resolution) + 1]
+    raster = np.full(size_pixels, np.nan, dtype=np.float32)
+    return raster
+
+def points_in_polygon(tri_mesh, poly, triangle_set, resolution=0.20):
     triangles_np = np.asarray(tri_mesh.triangles)
     vertices_np = np.asarray(tri_mesh.vertices)
     triangle_normals_np = np.asarray(tri_mesh.triangle_normals)
-
-    # triangle_centroids = vertices_np[triangles_np[:, 0]]
-    triangle_centroids = vertices_np[triangles_np].mean(axis=1) # slow, can be made faster
     triangles_planarity = triangle_normals_np @ np.array([[0], [0], [-1]])
 
-    bbox = bounding_box_polygon(poly)
-    mask = bounding_box_mask(triangle_centroids, *bbox[:4])
-    triangle_centroids_ = triangle_centroids[mask, :]
-    triangles_planarity_ = np.squeeze(triangles_planarity[mask, :])
+    affine, bbox = create_affine_from_polygon(poly)
 
-    pixels = affine_points_pixels(triangle_centroids_, affine)
-    raster[pixels[:, 1], pixels[:, 0]] = triangles_planarity_
-    raster = convolve(raster, box_kernel) 
-    raster[np.isnan(raster)] = 0.0
-    return raster
+    triangle_planarity_ = np.squeeze(triangles_planarity[triangle_set])
+    triangle_centroids_ = vertices_np[triangles_np[triangle_set, 0]]
+    # triangle_centroids = vertices_np[triangles_np[:, 0]]
+    # mask = bounding_box_mask(triangle_centroids, *bbox[:4])
+    # triangle_centroids_ = triangle_centroids[mask, :]
+    # triangle_planarity_ = np.squeeze(triangles_planarity[mask, :])
+
+    size_world = [bbox[1] - bbox[0], bbox[3] - bbox[2]]
+    size_pixels = [int(size_world[1] / resolution) + 1, int(size_world[0] / resolution) + 1]
+
+    triangle_pixels, mask = affine_points_pixels(triangle_centroids_, affine, size_pixels[1], size_pixels[0])
+    triangle_centroids_ = triangle_centroids_[mask, :]
+    triangle_planarity_ = triangle_planarity_[mask]
+    
+    return dict(triangle_centroids=triangle_centroids_, triangle_pixels=triangle_pixels, poly_bbox=bbox, triangle_planarity=triangle_planarity_)
 
 
+def create_confidence_map_planarity2(triangle_pixels, poly_bbox, triangle_planarity, **kwargs):
+    box_kernel = Box2DKernel(3)
+    raster_planarity = create_raster_from_bbox(poly_bbox)
+
+    raster_planarity[triangle_pixels[:, 1], triangle_pixels[:, 0]] = triangle_planarity
+    raster_planarity = convolve(raster_planarity, box_kernel) 
+    raster_planarity[np.isnan(raster_planarity)] = 0.0
+
+    return raster_planarity
+
+def modify_img_meta(img_meta, ds=4):
+    img_meta_copy = dict(**img_meta)
+    img_meta_copy['height'] = img_meta_copy['height'] // ds
+    img_meta_copy['width'] = img_meta_copy['width'] // ds
+    return img_meta_copy
+
+def create_confidence_map_segmentation(seg_img, img_meta, airsim_settings, triangle_centroids, triangle_pixels, poly_bbox, **kwargs):
+    box_kernel = Box2DKernel(3)
+    raster_seg = create_raster_from_bbox(poly_bbox)
+
+    pixels_seg, mask = get_pixels_from_points(triangle_centroids, img_meta, airsim_settings) # slow
+    seg_values = seg_img[pixels_seg[:, 1], pixels_seg[:, 0]]
+    seg_img[pixels_seg[:, 1], pixels_seg[:, 0]] = 0.5
+    triangle_pixels = triangle_pixels[mask, :]
+    raster_seg[triangle_pixels[:, 1], triangle_pixels[:, 0]] = seg_values
+    raster_seg = convolve(raster_seg, box_kernel) 
+    raster_seg[np.isnan(raster_seg)] = 0.0
+    return raster_seg
 
 
 def create_confidence_map_planarity(tri_mesh, img_meta, airsim_settings, ds=4):

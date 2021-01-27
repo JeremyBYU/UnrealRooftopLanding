@@ -83,11 +83,18 @@ def project_points_img(points, proj_mat, width, height, points_orig):
     return pixels, mask
 
 
-def affine_points_pixels(points, affine):
+def affine_points_pixels(points, affine, width, height):
     pixels = points[:,:2] - [affine[0, 0], affine[0, 1]]
     pixels = pixels / affine[0,2]
     pixels = np.floor(pixels).astype(np.int)
-    return pixels
+
+    # Remove pixels that are outside the image
+    mask_x = (pixels[:, 0] < width) & (pixels[:, 0] >= 0)
+    mask_y = (pixels[:, 1] < height) & (pixels[:, 1] >= 0)
+    mask = mask_x & mask_y
+    # Return the pixels and points that are inside the image
+    pixels = pixels[mask]
+    return pixels, mask
 
 def get_transforms(img_meta, airsim_settings):
     cam_ori = img_meta['rotation']

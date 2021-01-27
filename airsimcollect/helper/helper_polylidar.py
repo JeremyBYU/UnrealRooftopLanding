@@ -210,7 +210,7 @@ def extract_planes_and_polygons_from_classified_mesh(tri_mesh, avg_peaks,
 
     polylidar_time = (t1 - t0) * 1000
     all_planes_shapely = []
-    all_obstacles_shapely = []
+    all_triangle_sets = []
     time_filter = []
     if filter_polygons:
         vertices = np.asarray(tri_mesh.vertices)
@@ -218,6 +218,7 @@ def extract_planes_and_polygons_from_classified_mesh(tri_mesh, avg_peaks,
             avg_peak = avg_peaks[i, :]
             rm, _ = R.align_vectors([[0, 0, 1]], [avg_peak])
             polygons_for_normal = all_polygons[i]
+            all_triangle_sets = all_planes[i]
             if len(polygons_for_normal) > 0:
                 planes_shapely, filter_time = filter_and_create_polygons(
                     vertices, polygons_for_normal, rm=rm, postprocess=postprocess)
@@ -227,7 +228,7 @@ def extract_planes_and_polygons_from_classified_mesh(tri_mesh, avg_peaks,
     timings = dict(t_polylidar_planepoly=polylidar_time,
                    t_polylidar_filter=np.array(time_filter).sum())
     # all_planes_shapely, all_obstacles_shapely, all_poly_lines, timings
-    return all_planes_shapely, all_obstacles_shapely, timings
+    return all_planes_shapely, all_triangle_sets, timings
 
 
 
@@ -256,11 +257,11 @@ def extract_polygons(points_all, all_polys, pl, ga, ico, config,
     avg_peaks = choose_dominant_plane_normal(avg_peaks)
     alg_timings.update(timings)
     # 3. Extract Planes and Polygons
-    planes, obstacles, timings = extract_planes_and_polygons_from_classified_mesh(tri_mesh, avg_peaks, pl_=pl,
+    planes, triangle_sets, timings = extract_planes_and_polygons_from_classified_mesh(tri_mesh, avg_peaks, pl_=pl,
                                                                                   filter_polygons=True, segmented=segmented,
                                                                                   postprocess=config['polygon']['postprocess'])
     alg_timings.update(timings)
     # 100 ms to plot.... wish we had opengl line-width control
     if all_polys is not None:
         update_linemesh(planes, all_polys)
-    return planes, alg_timings, tri_mesh, avg_peaks
+    return planes, alg_timings, tri_mesh, avg_peaks, triangle_sets

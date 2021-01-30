@@ -130,26 +130,27 @@ def create_bbox_raster_from_polygon(poly:shapely, resolution=0.20):
 
     return raster, affine
 
-def create_raster_from_bbox(bbox, resolution=0.20):
+def create_raster_from_bbox(bbox, resolution=0.20, value=np.nan):
     size_world = [bbox[1] - bbox[0], bbox[3] - bbox[2]]
     size_pixels = [int(size_world[1] / resolution) + 1, int(size_world[0] / resolution) + 1]
-    raster = np.full(size_pixels, np.nan, dtype=np.float32)
+    raster = np.full(size_pixels, value, dtype=np.float64)
     return raster
 
 def points_in_polygon(tri_mesh, poly, triangle_set, resolution=0.20):
     triangles_np = np.asarray(tri_mesh.triangles)
     vertices_np = np.asarray(tri_mesh.vertices)
     triangle_normals_np = np.asarray(tri_mesh.triangle_normals)
-    triangles_planarity = triangle_normals_np @ np.array([[0], [0], [-1]])
+    triangles_planarity = np.abs(triangle_normals_np @ np.array([[0], [0], [-1]]))
 
     affine, bbox = create_affine_from_polygon(poly)
-
-    triangle_planarity_ = np.squeeze(triangles_planarity[triangle_set])
-    triangle_centroids_ = vertices_np[triangles_np[triangle_set, 0]]
-    # triangle_centroids = vertices_np[triangles_np[:, 0]]
-    # mask = bounding_box_mask(triangle_centroids, *bbox[:4])
-    # triangle_centroids_ = triangle_centroids[mask, :]
-    # triangle_planarity_ = np.squeeze(triangles_planarity[mask, :])
+    bbox[4] = bbox[4] - 1 # z component
+    bbox[5] = bbox[5] + 1 # z component
+    # triangle_planarity_ = np.squeeze(triangles_planarity[triangle_set])
+    # triangle_centroids_ = vertices_np[triangles_np[triangle_set, 0]]
+    triangle_centroids = vertices_np[triangles_np[:, 0]]
+    mask = bounding_box_mask(triangle_centroids, *bbox[:6])
+    triangle_centroids_ = triangle_centroids[mask, :]
+    triangle_planarity_ = np.squeeze(triangles_planarity[mask, :])
 
     size_world = [bbox[1] - bbox[0], bbox[3] - bbox[2]]
     size_pixels = [int(size_world[1] / resolution) + 1, int(size_world[0] / resolution) + 1]

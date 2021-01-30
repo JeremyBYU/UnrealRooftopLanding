@@ -149,6 +149,7 @@ def main(gui=True, segmented=False):
 
         # Load Images
         img_scene = cv2.imread(str(scene_paths_dict[path_key]))
+        img_scene = cv2.cvtColor(img_scene, cv2.COLOR_BGR2RGB)
         img_seg = cv2.imread(str(segmentation_paths_dict[path_key]))
         # Load LiDAR Data
         pc_np = np.load(str(lidar_paths_dict[path_key]))

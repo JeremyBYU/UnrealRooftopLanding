@@ -98,6 +98,10 @@ def update_airsim_settings():
     if lidar_frame == 'SensorLocalFrame':
         AIR_SIM_SETTINGS['lidar_z_col'] = 0
         AIR_SIM_SETTINGS['lidar_local_frame'] = True
+    AIR_SIM_SETTINGS['lidar_beams'] = deep_get(data, 'Vehicles.Drone1.Sensors.0.NumberOfChannels')
+    AIR_SIM_SETTINGS['range_noise'] = deep_get(data, 'Vehicles.Drone1.Sensors.0.RangeNoise')
+    AIR_SIM_SETTINGS['horizontal_noise'] = deep_get(data, 'Vehicles.Drone1.Sensors.0.HorizontalNoise')
+
 
     # Determine relative pose offset between camera and lidar frame
     lidar_x = deep_get(data, 'Vehicles.Drone1.Sensors.0.X')

@@ -10,6 +10,7 @@ from functools import partial
 import argparse
 
 import yaml
+# import matplotlib.pyplot as plt
 from rich import print as rprint
 import numpy as np
 from shapely.geometry import shape, Polygon
@@ -17,6 +18,7 @@ import shapely
 from airsim.types import Vector3r, Quaternionr
 import cv2
 import pandas as pd
+# from descartes import PolygonPatch
 
 from airsimcollect.helper.helper_logging import logger
 from airsimcollect.helper.o3d_util import (update_linemesh, handle_linemeshes, init_vis, create_frustum,
@@ -36,21 +38,24 @@ from polylidar import MatrixDouble, extract_tri_mesh_from_organized_point_cloud,
 ROOT_DIR = Path(__file__).parent.parent
 SAVED_DATA_DIR = ROOT_DIR / 'AirSimCollectData/LidarRoofManualTest'
 GEOSON_MAP = ROOT_DIR / Path("assets/maps/roof-lidar-manual.geojson")
-O3D_VIEW = ROOT_DIR / Path("assets/o3d/o3d_view_default.json")
 RESULTS_DIR = ROOT_DIR / Path("assets/results")
+O3D_VIEW = ROOT_DIR / Path("assets/o3d/o3d_view_default.json")
 FOV = 90
 
 
-def main(gui=True, segmented=False):
+def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
     records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict = load_records(
-        SAVED_DATA_DIR)
+        save_data_dir)
 
     # Load yaml file
     with open('./assets/config/PolylidarParams.yaml') as file:
         config = yaml.safe_load(file)
 
     start_offset_unreal = np.array(records['start_offset_unreal'])
-    map_features_dict = load_map(GEOSON_MAP, start_offset_unreal)
+    map_features_dict = load_map(geoson_map, start_offset_unreal)
+    airsim_settings = records.get('airsim_settings', dict())
+    lidar_beams = airsim_settings.get('lidar_beams', 64)
+    range_noise = airsim_settings.get('range_noise', 0.05)
 
     # Create Polylidar Objects
     pl = Polylidar3D(**config['polylidar'])
@@ -92,8 +97,8 @@ def main(gui=True, segmented=False):
                         record['uid'], record['sub_uid'], bulding_label)
             continue
         # uid #45 is best segmentation example
-        if record['uid'] < 10:
-            continue
+        # if record['uid'] < 10:
+        #     continue
 
         logger.info("Inspecting record; UID: %s; SUB-UID: %s; Building Name: %s",
                     record['uid'], record['sub_uid'], bulding_label)
@@ -129,10 +134,10 @@ def main(gui=True, segmented=False):
 
         # Polygon Extraction of surface
         pl_planes, alg_timings, _, _, _ = extract_polygons(pc_np, geometry_set['pl_polys'] if not segmented else None, pl, ga,
-                                                  ico, config, segmented=False)
+                                                  ico, config, segmented=False, lidar_beams=lidar_beams)
 
         pl_planes_seg, alg_timings_seg, _, _, _ = extract_polygons(pc_np, geometry_set['pl_polys'] if segmented else None, pl, ga,
-                                                          ico, config, segmented=True)
+                                                          ico, config, segmented=True, lidar_beams=lidar_beams)
 
         if pl_planes and True:
             base_iou, pl_poly_estimate, gt_poly = compute_metric(
@@ -170,12 +175,15 @@ def main(gui=True, segmented=False):
     df = pd.DataFrame.from_records(result_records)
     print(df)
     df['iou_diff'] = df['pl_base_iou'] - df['pl_seg_gt_iou']
-    df.to_csv(RESULTS_DIR / "test.csv")
+    df.to_csv(RESULTS_DIR / results_fname)
     print(df.mean())
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Check LiDAR")
+    parser.add_argument('--data', type=str, default=SAVED_DATA_DIR)
+    parser.add_argument('--map', type=str, default=GEOSON_MAP)
+    parser.add_argument('--results', type=str, default='results.csv')
     parser.add_argument('--gui', dest='gui', action='store_true')
     parser.add_argument('--seg', dest='seg', action='store_true')
     args = parser.parse_args()
@@ -184,4 +192,4 @@ def parse_args():
 
 if __name__ == "__main__":
     args = parse_args()
-    main(args.gui, args.seg)
+    main(Path(args.data), Path(args.map), args.results, args.gui, args.seg)

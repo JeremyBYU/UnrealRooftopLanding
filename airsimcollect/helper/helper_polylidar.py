@@ -15,7 +15,7 @@ from fastga.o3d_util import get_arrow, get_pc_all_peaks, get_arrow_normals
 
 
 from airsimcollect.helper.helper_metrics import choose_dominant_plane_normal
-from airsimcollect.helper.helper_mesh import create_meshes_cuda
+from airsimcollect.helper.helper_mesh import create_meshes_cuda, get_planar_point_density, decimate_column_opc, map_pd_to_decimate_kernel
 from airsimcollect.helper.o3d_util import update_linemesh
 
 
@@ -233,17 +233,34 @@ def extract_planes_and_polygons_from_classified_mesh(tri_mesh, avg_peaks,
 
 
 def extract_polygons(points_all, all_polys, pl, ga, ico, config,
-                     lidar_beams=64, segmented=True, roof_class=4):
+                     lidar_beams=64, segmented=True, roof_class=4,
+                     dynamic_decimation=True):
     points = points_all[:, :3]
     num_cols = int(points.shape[0] / lidar_beams)
     opc = points.reshape((lidar_beams, num_cols, 3))
+
+    if dynamic_decimation:
+        point_density = get_planar_point_density(opc, z_col=2)
+        if point_density is None:
+            print("Center of point cloud only has NaNs!")
+            point_density = 20
+        decimate_kernel = map_pd_to_decimate_kernel(point_density)
+        print(
+            f"Planar point density: {point_density:.1f}; Decimate Kernel: {decimate_kernel}")
+        # 0. Decimate
+        opc, alg_timings = decimate_column_opc(
+            opc, kernel_size=decimate_kernel, num_threads=1)
+
+        classes_ = points_all[:, 3].astype(np.uint8).reshape((lidar_beams, num_cols))
+        classes = np.expand_dims((classes_[:, ::decimate_kernel]).flatten(), axis=1)
+    else:
+        classes = np.expand_dims(points_all[:, 3].astype(np.uint8), axis=1)
     # 1. Create mesh
     alg_timings = dict()
     tri_mesh, timings = create_meshes_cuda(opc, **config['mesh']['filter'])
     alg_timings.update(timings)
 
     # Get classes for each vertex and set them
-    classes = np.expand_dims(points_all[:, 3].astype(np.uint8), axis=1)
     classes[classes == 255] = roof_class
     classes[classes != roof_class] = 0
     classes[classes == roof_class] = 1

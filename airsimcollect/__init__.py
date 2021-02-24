@@ -28,7 +28,8 @@ class AirSimCollect(object):
     def __init__(
             self, name="AirSimCollector", sim_mode="ComputerVision", save_dir="AirSimData", collectors=None,
             segmentation_codes=[], collection_points=None, global_id_start=0, collector_file_prefix="", bar=None, collections_per_point=1,
-            ignore_collision=False, collection_point_names=None, min_elapsed_time=0.01, color_codes=None, start_offset_unreal=[0, 0, 0]):
+            ignore_collision=False, collection_point_names=None, min_elapsed_time=0.01, color_codes=None, start_offset_unreal=[0, 0, 0],
+            client=None, manual_collect=False):
         self.name = name
         self.sim_mode = sim_mode
         self.save_dir = save_dir
@@ -48,11 +49,14 @@ class AirSimCollect(object):
         self.airsim_settings = update_airsim_settings()
         
 
-        if self.collection_points is None or self.collectors is None:
+        if (self.collection_points is None or self.collectors is None) and not manual_collect:
             logger.error(
                 "Need collection points and collectors. Exiting early..")
             sys.exit()
-        self.connect_airsim()
+        if client is None:
+            self.connect_airsim()
+        else:
+            self.client = client
         self.prepare_collectors()
         self.global_id_counter = count(start=global_id_start)
         self.current_global_id = 0
@@ -97,7 +101,10 @@ class AirSimCollect(object):
 
         simple_airsim_settings = dict(lidar_local_frame=self.airsim_settings['lidar_local_frame'],
                                       lidar_to_camera_pos=ltcp, lidar_to_camera_quat=ltcq,
-                                      lidar_z_col=self.airsim_settings['lidar_z_col'])
+                                      lidar_z_col=self.airsim_settings['lidar_z_col'], 
+                                      lidar_beams=self.airsim_settings['lidar_beams'],
+                                      range_noise=self.airsim_settings['range_noise'],
+                                      horizontal_noise=self.airsim_settings['horizontal_noise'])
 
         records = dict(airsim_settings=simple_airsim_settings, start_offset_unreal=self.start_offset_unreal, records=records)
         with open(fpath, 'w') as outfile:
@@ -139,7 +146,7 @@ class AirSimCollect(object):
                 try:
                     self.current_global_id = self.get_next_global_id()
                     for sub_uid in range(self.collections_per_point):
-                        record = self.collect_data_at_point(pos, rot, self.current_global_id, sub_uid)
+                        record = self.collect_data_at_point(self.current_global_id, sub_uid)
                         records.append(record)
                 except Exception:
                     logger.exception("Error collection data!")
@@ -274,7 +281,7 @@ class AirSimCollect(object):
                 lidars_meta.append(lidar_meta)
         return lidars_meta
 
-    def collect_data_at_point(self, pos, rot, global_id, sub_uid):
+    def collect_data_at_point(self, global_id, sub_uid, label='', extra_data={}):
         """Collect data from each collector
 
         Arguments:
@@ -306,7 +313,7 @@ class AirSimCollect(object):
                 lidar_collectors, images_meta, global_id, sub_uid)
 
         sensor_meta_data = sensor_meta_data_json(images_meta, lidars_meta)
-        label = self.collection_point_names[global_id] if self.collection_point_names else ''
+        label = self.collection_point_names[global_id] if self.collection_point_names else label
         record = {"uid": global_id, "sub_uid": sub_uid,
-                  'sensors': sensor_meta_data, 'label': label}
+                  'sensors': sensor_meta_data, 'label': label, **extra_data}
         return record

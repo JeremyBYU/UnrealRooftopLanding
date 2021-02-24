@@ -75,7 +75,9 @@ Next we will launch AirSim in `Multirotor` mode. This time we will generate imag
 
 Notes - Sometimes the camera takes time to update position, add more time delay than 0.5 seconds. In other words the lidar and vehicle move to a new position but the camera is still in the old position (AirSim bug).
 
+### Decision Point Analysis
 
+1. `python -m scripts.check_saved_lidar --gui --seg --data AirSimCollectData/LidarDecisionPoint --map assets/maps/roof-lidar-decision-point.geojson`
 
 ## Extra Notes
 

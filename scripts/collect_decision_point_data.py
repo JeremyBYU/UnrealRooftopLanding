@@ -57,8 +57,8 @@ def create_square_pose(altitude=-5, pose=np.array([0, 0, 0]), square_size=4, gri
 
 
 def main(config_file):
-    # heights = [5, 10, 15, 20, 25, 30]
-    heights= [5]
+    heights = [5, 10, 15, 20, 25, 30]
+    # heights= [5]
     asc, records, global_id = setup_airsimcollect(config_file)
     for height in heights:
         poses = create_square_pose(-height)

@@ -33,12 +33,11 @@ from fastga import GaussianAccumulatorS2Beta, IcoCharts
 from polylidar import MatrixDouble, extract_tri_mesh_from_organized_point_cloud, HalfEdgeTriangulation, Polylidar3D, MatrixUInt8
 
 
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = Path(__file__).parent.parent
 SAVED_DATA_DIR = ROOT_DIR / 'AirSimCollectData/LidarRoofManualTest'
 GEOSON_MAP = ROOT_DIR / Path("assets/maps/roof-lidar-manual.geojson")
 O3D_VIEW = ROOT_DIR / Path("assets/o3d/o3d_view_default.json")
 RESULTS_DIR = ROOT_DIR / Path("assets/results")
-
 FOV = 90
 
 
@@ -96,8 +95,6 @@ def main(gui=True, segmented=False):
         if record['uid'] < 10:
             continue
 
-        # ground truth to fix, 162, 135, 40, 22
-
         logger.info("Inspecting record; UID: %s; SUB-UID: %s; Building Name: %s",
                     record['uid'], record['sub_uid'], bulding_label)
         # map feature of the building
@@ -131,10 +128,10 @@ def main(gui=True, segmented=False):
                 distance_to_camera, camera_position, hfov=FOV, vfov=FOV)
 
         # Polygon Extraction of surface
-        pl_planes, alg_timings, _ = extract_polygons(pc_np, geometry_set['pl_polys'] if not segmented else None, pl, ga,
+        pl_planes, alg_timings, _, _, _ = extract_polygons(pc_np, geometry_set['pl_polys'] if not segmented else None, pl, ga,
                                                   ico, config, segmented=False)
 
-        pl_planes_seg, alg_timings_seg, _ = extract_polygons(pc_np, geometry_set['pl_polys'] if segmented else None, pl, ga,
+        pl_planes_seg, alg_timings_seg, _, _, _ = extract_polygons(pc_np, geometry_set['pl_polys'] if segmented else None, pl, ga,
                                                           ico, config, segmented=True)
 
         if pl_planes and True:
@@ -148,7 +145,7 @@ def main(gui=True, segmented=False):
             result_records.append(dict(uid=record['uid'], sub_uid=record['sub_uid'],
                                        building=bulding_label, pl_base_iou=base_iou,
                                        pl_seg_gt_iou=seg_gt_iou,
-                                       **alg_timings))
+                                       **alg_timings_seg))
             # Visualize these intersections
             if gui:
                 # Visualize the polylidar with segmentation results
@@ -173,7 +170,7 @@ def main(gui=True, segmented=False):
     df = pd.DataFrame.from_records(result_records)
     print(df)
     df['iou_diff'] = df['pl_base_iou'] - df['pl_seg_gt_iou']
-    # df.to_csv(RESULTS_DIR / "test.csv")
+    df.to_csv(RESULTS_DIR / "test.csv")
     print(df.mean())
 
 

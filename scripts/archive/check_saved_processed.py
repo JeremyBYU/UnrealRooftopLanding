@@ -26,7 +26,7 @@ from airsimcollect.helper.helper_confidence_maps import (create_fake_confidence_
 from airsimcollect.helper.helper_polylidar import extract_polygons
 
 
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = Path(__file__).parent.parent
 SAVED_DATA_DIR = ROOT_DIR / 'AirSimCollectData/LidarRoofManualTest'
 PROCESSED_DATA_DIR = SAVED_DATA_DIR / 'Processed'
 GEOSON_MAP = ROOT_DIR / Path("assets/maps/roof-lidar-manual.geojson")

@@ -225,12 +225,12 @@ def init_vis(width=700, height=700):
     # create map
     map_polys = VisibleLineMeshes([], vis, visible=True, name='map_polys')
     # create polylidar polygons
-    pl_polys = VisibleLineMeshes([], vis, visible=True, name='pl_polys')
+    pl_polys = VisibleLineMeshes([], vis, visible=False, name='pl_polys')
     # Create a mesh
     # Create a LineMesh for the Frustum
     frustum = VisibleLineMeshes([], vis, visible=True, name='frustum')
     # Create a Line Mesh for the interstion of the Frustum and predicted polygons
-    pl_isec = VisibleLineMeshes([], vis, visible=False, name='pl_isec')
+    pl_isec = VisibleLineMeshes([], vis, visible=True, name='pl_isec')
     gt_isec = VisibleLineMeshes([], vis, visible=False, name='gt_isec')
 
     # add geometries

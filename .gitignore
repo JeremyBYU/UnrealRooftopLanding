@@ -3,6 +3,7 @@ AirSimCollectData
 assets/maps/**/*.txt
 assets/maps/**/*.npy
 assets/maps/archive
+assets/imgs/assets
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

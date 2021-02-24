@@ -49,7 +49,7 @@ from airsimcollect.helper.helper_polylidar import extract_polygons
 from fastga import GaussianAccumulatorS2Beta, IcoCharts
 from polylidar import Polylidar3D
 
-ROOT_DIR = Path(__file__).parent.parent.parent
+ROOT_DIR = Path(__file__).parent.parent
 SAVED_DATA_DIR = ROOT_DIR / 'AirSimCollectData/LidarRoofManualTest'
 GEOSON_MAP = ROOT_DIR / Path("assets/maps/roof-lidar-manual.geojson")
 O3D_VIEW = ROOT_DIR / Path("assets/o3d/o3d_view_default.json")

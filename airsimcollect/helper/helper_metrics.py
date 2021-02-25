@@ -23,6 +23,26 @@ def convert_dict(directory, suffix='.', required_extension=''):
     return {f.split('.')[0]: directory / f for f in listdir(directory) if f.endswith(required_extension)}
 
 
+def found_hole(poly_gt, poly_pl:Polygon, remaining_pct=0.05):
+    hole_gt = Polygon(poly_gt.interiors[0])
+    num_holes = len(poly_pl.interiors)
+
+    if num_holes < 1:
+        return False, 1.0
+    
+    min_dist = 100000
+    min_poly = None
+    for index, hole in enumerate(poly_pl.interiors):
+        hole_pl = Polygon(hole)
+        dist = hole_pl.distance(hole_gt)
+        if dist < min_dist:
+            min_poly = hole_pl
+            min_dist = dist
+    
+    remaining_poly = hole_gt.difference(min_poly)
+    remaining = remaining_poly.area / hole_gt.area
+    return remaining <= remaining_pct, remaining
+
 def compute_metric(building_feature, pl_planes, frustum_points):
     # Create 3D shapely polygons of polylidar estimate and "ground truth" surface LIMITED to the sensor field of view of the camera frustum
     pl_poly_estimate = create_frustum_intersection(select_polygon(

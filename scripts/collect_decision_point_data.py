@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 import time
 from os import path
 
@@ -9,6 +10,7 @@ from airsim import Vector3r, Pose, to_quaternion, ImageRequest
 
 from airsimcollect.helper.helper import update, update_collectors, DEFAULT_CONFIG
 from airsimcollect import AirSimCollect
+from airsimcollect.helper.helper_logging import logger
 
 
 def parse_args():
@@ -68,10 +70,17 @@ def main(config_file):
             time.sleep(asc.min_elapsed_time)
             extra_data = dict(lidar_beams=asc.airsim_settings['lidar_beams'],
                               range_noise=asc.airsim_settings['range_noise'],
-                              horizontal_noise=asc.airsim_settings['horizontal_noise'])
-            record = asc.collect_data_at_point(
-                global_id, sub_id, label='Building2_Example3', extra_data=extra_data)
-            records.append(record)
+                              horizontal_noise=asc.airsim_settings['horizontal_noise'],
+                              height=height)
+            record = None
+            while record is None:
+                try:
+                    record = asc.collect_data_at_point(
+                        global_id, sub_id, label='Building2_Example3', extra_data=extra_data)
+                    records.append(record)
+                except:
+                    logger.exception("Error getting data from point, retrying..")
+                    time.sleep(asc.min_elapsed_time)
         global_id += 1
     asc.save_records(records)
 

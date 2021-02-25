@@ -24,7 +24,7 @@ from airsimcollect.helper.o3d_util import (update_linemesh, handle_linemeshes, i
                                            update_frustum, load_view_point, save_view_point, toggle_visibility)
 from airsimcollect.helper.helper_transforms import classify_points
 from airsimcollect.helper.helper_metrics import (
-    load_map, select_building, load_map, load_records, compute_metric, update_state)
+    load_map, select_building, load_map, load_records, compute_metric, update_state, found_hole)
 from airsimcollect.helper.helper_polylidar import extract_polygons
 
 from fastga import GaussianAccumulatorS2Beta, IcoCharts
@@ -32,8 +32,8 @@ from polylidar import MatrixDouble, extract_tri_mesh_from_organized_point_cloud,
 
 
 ROOT_DIR = Path(__file__).parent.parent
-SAVED_DATA_DIR = ROOT_DIR / 'AirSimCollectData/LidarRoofManualTest'
-GEOSON_MAP = ROOT_DIR / Path("assets/maps/roof-lidar-manual.geojson")
+SAVED_DATA_DIR = ROOT_DIR / 'AirSimCollectData/LidarDecisionPoint'
+GEOSON_MAP = ROOT_DIR / Path("assets/maps/roof-lidar-decision-point.geojson")
 RESULTS_DIR = ROOT_DIR / Path("assets/results")
 O3D_VIEW = ROOT_DIR / Path("assets/o3d/o3d_view_default.json")
 FOV = 90
@@ -91,16 +91,9 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
     for record in records['records']:
         path_key = f"{record['uid']}-{record['sub_uid']}-0"
         bulding_label = record['label']  # building name
-        if record['uid'] in [25, 26, 27, 28, 29]:
-            logger.warn("Skipping record; UID: %s; SUB-UID: %s; Building Name: %s. Rooftop assets don't match map. Rooftop assets randomness wasn't fixed on this asset!",
-                        record['uid'], record['sub_uid'], bulding_label)
-            continue
-        # uid #45 is best segmentation example
-        # if record['uid'] < 59:
-        #     continue
 
-        logger.info("Inspecting record; UID: %s; SUB-UID: %s; Building Name: %s",
-                    record['uid'], record['sub_uid'], bulding_label)
+        logger.info("Inspecting record; UID: %s; SUB-UID: %s; Height: %s; LiDAR Range Noise: %s; LiDAR Beams: %s",
+                    record['uid'], record['sub_uid'], record['height'], record['range_noise'], record['lidar_beams'])
         # Get camera data
         img_meta = record['sensors'][0]
         update_state(img_meta)
@@ -160,13 +153,21 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
                 building_feature, pl_planes_seg_gt, frustum_points)
             seg_infer_iou, pl_poly_estimate_seg, _ = compute_metric(
                 building_feature, pl_planes_seg_infer, frustum_points)
-            logger.info("Polylidar3D Base IOU - %.1f; Seg GT IOU - %.1f; Seg Infer IOU - %.1f",
-                        base_iou * 100, seg_gt_iou * 100, seg_infer_iou * 100)
+            success, remaining = found_hole(gt_poly, pl_poly_estimate_seg)
+            logger.info("Polylidar3D Base IOU - %.1f; Seg GT IOU - %.1f; Seg Infer IOU - %.1f; Found Hole - %s",
+                        base_iou * 100, seg_gt_iou * 100, seg_infer_iou * 100, success)
+
+            # if not success:
+            #     import ipdb; ipdb.set_trace()
 
             result_records.append(dict(uid=record['uid'], sub_uid=record['sub_uid'],
                                        building=bulding_label, pl_base_iou=base_iou,
                                        pl_seg_gt_iou=seg_gt_iou, pl_seg_infer_iou=seg_infer_iou,
+                                       height=record['height'], range_noise=record['range_noise'],
+                                       lidar_beams=record['lidar_beams'],
+                                       found_hole=success, hole_remaining=remaining,
                                        **alg_timings_seg))
+            
             # Visualize these intersections
             if gui:
                 # Visualize the polylidar with segmentation results
@@ -198,7 +199,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Check LiDAR")
     parser.add_argument('--data', type=str, default=SAVED_DATA_DIR)
     parser.add_argument('--map', type=str, default=GEOSON_MAP)
-    parser.add_argument('--results', type=str, default='results.csv')
+    parser.add_argument('--results', type=str, default='decision_point_results.csv')
     parser.add_argument('--gui', dest='gui', action='store_true')
     parser.add_argument('--seg', dest='seg', action='store_true')
     args = parser.parse_args()

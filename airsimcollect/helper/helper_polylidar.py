@@ -14,12 +14,14 @@ from fastga.peak_and_cluster import find_peaks_from_ico_charts
 from fastga.o3d_util import get_arrow, get_pc_all_peaks, get_arrow_normals
 
 
+from airsimcollect.helper.helper_logging import logger
 from airsimcollect.helper.helper_metrics import choose_dominant_plane_normal
 from airsimcollect.helper.helper_mesh import create_meshes_cuda, get_planar_point_density, decimate_column_opc, map_pd_to_decimate_kernel
 from airsimcollect.helper.o3d_util import update_linemesh
 
 
 import open3d as o3d
+
 
 def down_sample_normals(triangle_normals, down_sample_fraction=0.12, min_samples=100, flip_normals=False, **kwargs):
     num_normals = triangle_normals.shape[0]
@@ -231,35 +233,32 @@ def extract_planes_and_polygons_from_classified_mesh(tri_mesh, avg_peaks,
     return all_planes_shapely, all_triangle_sets, timings
 
 
-
 def extract_polygons(points_all, all_polys, pl, ga, ico, config,
                      lidar_beams=64, segmented=True, roof_class=4,
                      dynamic_decimation=True):
     points = points_all[:, :3]
     num_cols = int(points.shape[0] / lidar_beams)
     opc = points.reshape((lidar_beams, num_cols, 3))
-
     if dynamic_decimation:
         point_density = get_planar_point_density(opc, z_col=2)
         if point_density is None:
-            print("Center of point cloud only has NaNs!")
+            logger.debug("Center of point cloud only has NaNs!")
             point_density = 20
         decimate_kernel = map_pd_to_decimate_kernel(point_density)
-        print(
-            f"Planar point density: {point_density:.1f}; Decimate Kernel: {decimate_kernel}")
+        logger.debug(f"Planar point density: {point_density:.1f}; Decimate Kernel: {decimate_kernel}")
         # 0. Decimate
         opc, alg_timings = decimate_column_opc(
             opc, kernel_size=decimate_kernel, num_threads=1)
 
         classes_ = points_all[:, 3].astype(np.uint8).reshape((lidar_beams, num_cols))
-        classes = np.expand_dims((classes_[:, ::decimate_kernel]).flatten(), axis=1)
+        max_col = classes_.shape[1] if (classes_.shape[1] % decimate_kernel) == 0 else classes_.shape[1] - 1
+        classes = np.expand_dims((classes_[:, :max_col:decimate_kernel]).flatten(), axis=1)
     else:
         classes = np.expand_dims(points_all[:, 3].astype(np.uint8), axis=1)
     # 1. Create mesh
     alg_timings = dict()
     tri_mesh, timings = create_meshes_cuda(opc, **config['mesh']['filter'])
     alg_timings.update(timings)
-
     # Get classes for each vertex and set them
     classes[classes == 255] = roof_class
     classes[classes != roof_class] = 0
@@ -275,8 +274,8 @@ def extract_polygons(points_all, all_polys, pl, ga, ico, config,
     alg_timings.update(timings)
     # 3. Extract Planes and Polygons
     planes, triangle_sets, timings = extract_planes_and_polygons_from_classified_mesh(tri_mesh, avg_peaks, pl_=pl,
-                                                                                  filter_polygons=True, segmented=segmented,
-                                                                                  postprocess=config['polygon']['postprocess'])
+                                                                                      filter_polygons=True, segmented=segmented,
+                                                                                      postprocess=config['polygon']['postprocess'])
     alg_timings.update(timings)
     # 100 ms to plot.... wish we had opengl line-width control
     if all_polys is not None:

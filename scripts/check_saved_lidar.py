@@ -100,7 +100,7 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
                         record['uid'], record['sub_uid'], bulding_label)
             continue
         # uid #45 is best segmentation example
-        # if record['uid'] < 10:
+        # if record['uid'] < 59:
         #     continue
 
         logger.info("Inspecting record; UID: %s; SUB-UID: %s; Building Name: %s",

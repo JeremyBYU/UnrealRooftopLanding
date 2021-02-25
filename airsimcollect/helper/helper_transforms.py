@@ -1,4 +1,5 @@
 from airsim.types import Quaternionr, Vector3r
+import ipdb
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 import airsim
@@ -386,7 +387,7 @@ def get_colors_from_image(pixels, img, normalize=True):
         [type] -- [description]
     """
     # Notice the flip in axes as well as dividing by 255.0 to give floats
-    if normalize:
+    if normalize and len(img.shape) > 2:
         colors = np.squeeze(img[pixels[:, 1], pixels[:, 0], :]) / 255.0
     else:
         if len(img.shape) > 2:

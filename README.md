@@ -181,4 +181,28 @@ Notes - Sometimes the camera takes time to update position, add more time delay 
 	"version_major" : 1,
 	"version_minor" : 0
 }
+
+{
+	"class_name" : "ViewTrajectory",
+	"interval" : 29,
+	"is_loop" : false,
+	"trajectory" : 
+	[
+		{
+			"boundingbox_max" : [ 99.63488281250001, 118.96718750000001, 10.57262817382817 ],
+			"boundingbox_min" : [ -172.06511718750002, -157.73282089603492, -26.46878417968756 ],
+			"field_of_view" : 59.999999999999993,
+			"front" : [ -0.75057721738910432, -0.023062933894965568, -0.6603801494719429 ],
+			"lookat" : [ 14.595872846040965, 4.5219864368272846, 9.3399041178781541 ],
+			"up" : [ 0.66077992921403872, -0.023277484157787354, -0.75021866404347348 ],
+			"zoom" : 0.16742981091231904
+		}
+	],
+	"version_major" : 1,
+	"version_minor" : 0
+}
+
   ```
+
+
+

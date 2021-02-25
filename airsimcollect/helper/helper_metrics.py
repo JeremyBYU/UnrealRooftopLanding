@@ -5,11 +5,22 @@ from shapely.geometry import shape, Polygon
 from os import listdir
 import json
 import shapely
+import joblib
+from airsim.types import Vector3r
 
 from airsimcollect.helper.o3d_util import create_linemesh_from_shapely
 
-def convert_dict(directory, suffix='.'):
-    return {f.split('.')[0]: directory / f for f in listdir(directory)}
+
+def update_state(record, position='position', rotation='rotation'):
+    position_data = record[position] if isinstance(
+        record[position], list) else list(record[position].values())
+    rotation_data = record[rotation] if isinstance(
+        record[rotation], list) else list(record[rotation].values())
+    record[position] = Vector3r(*position_data)
+    record[rotation] = np.quaternion(*rotation_data)
+
+def convert_dict(directory, suffix='.', required_extension=''):
+    return {f.split('.')[0]: directory / f for f in listdir(directory) if f.endswith(required_extension)}
 
 
 def compute_metric(building_feature, pl_planes, frustum_points):
@@ -61,6 +72,7 @@ def load_records(directory):
     lidar_directory = directory / Path("Lidar")
     scene_directory = directory / Path("Scene")
     segmentation_directory = directory / Path("Segmentation")
+    segmentation_infer_directory:Path = directory / Path("SegmentationInfer")
     records_path = directory / 'records.json'
 
     with open(records_path) as f:
@@ -69,8 +81,15 @@ def load_records(directory):
     lidar_paths_dict = convert_dict(lidar_directory)
     scene_paths_dict = convert_dict(scene_directory)
     segmentation_paths_dict = convert_dict(segmentation_directory)
+    if segmentation_infer_directory.exists():
+        seg_infer_paths_dict = convert_dict(segmentation_infer_directory, required_extension='.png')
+        predictions = joblib.load(segmentation_infer_directory / "predictions.joblib")
+        seg_infer_dict = { prediction['fname']: prediction['data'] for prediction in predictions}
+    else:
+        seg_infer_paths_dict = {}
+        seg_infer_dict = {}
 
-    return records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict
+    return records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict, seg_infer_paths_dict, seg_infer_dict
 
 def choose_dominant_plane_normal(avg_peaks, rooftop_normal=[0.0, 0.0, -1.0]):
     dots = np.array([avg_peaks[i, :].dot(rooftop_normal) for i in range(avg_peaks.shape[0])])

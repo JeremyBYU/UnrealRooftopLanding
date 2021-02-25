@@ -26,9 +26,10 @@ from airsimcollect.helper.o3d_util import (update_linemesh, handle_linemeshes, i
                                            update_frustum, load_view_point, save_view_point, toggle_visibility)
 from airsimcollect.helper.helper_mesh import (
     create_meshes_cuda, update_open_3d_mesh_from_tri_mesh)
+from airsimcollect.helper.helper_transforms import classify_points
 from airsimcollect.helper.helper_metrics import (create_frustum_intersection, load_map, select_polygon,
                                                  select_building, choose_dominant_plane_normal,
-                                                 load_map, load_records, compute_metric)
+                                                 load_map, load_records, compute_metric, update_state)
 from airsimcollect.helper.helper_polylidar import extract_polygons, extract_all_dominant_plane_normals, extract_planes_and_polygons_from_classified_mesh
 
 from fastga import GaussianAccumulatorS2Beta, IcoCharts
@@ -42,9 +43,8 @@ RESULTS_DIR = ROOT_DIR / Path("assets/results")
 O3D_VIEW = ROOT_DIR / Path("assets/o3d/o3d_view_default.json")
 FOV = 90
 
-
 def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
-    records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict = load_records(
+    records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict, seg_infer_path_dict, seg_infer_dict = load_records(
         save_data_dir)
 
     # Load yaml file
@@ -56,6 +56,9 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
     airsim_settings = records.get('airsim_settings', dict())
     lidar_beams = airsim_settings.get('lidar_beams', 64)
     range_noise = airsim_settings.get('range_noise', 0.05)
+    # have to turn some json keys into proper objects, quaternions...
+    update_state(airsim_settings, position='lidar_to_camera_pos',
+                 rotation='lidar_to_camera_quat')
 
     # Create Polylidar Objects
     pl = Polylidar3D(**config['polylidar'])
@@ -102,16 +105,28 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
 
         logger.info("Inspecting record; UID: %s; SUB-UID: %s; Building Name: %s",
                     record['uid'], record['sub_uid'], bulding_label)
+        # Get camera data
+        img_meta = record['sensors'][0]
+        update_state(img_meta)
+        camera_position = img_meta['position'].to_numpy_array()
         # map feature of the building
         building_features = map_features_dict[bulding_label]
-        camera_position = Vector3r(
-            **record['sensors'][0]['position']).to_numpy_array()
         building_feature = select_building(building_features, camera_position)
-        distance_to_camera = building_feature['ned_height'] - \
-            camera_position[2]
+        distance_to_camera = building_feature['ned_height'] - camera_position[2]
 
         # Load LiDAR Data
         pc_np = np.load(str(lidar_paths_dict[path_key]))
+        # Load Images
+        img_scene = cv2.imread(str(scene_paths_dict[path_key]))
+        img_seg = cv2.imread(str(segmentation_paths_dict[path_key]))
+        img_seg_infer = cv2.imread(str(seg_infer_path_dict[path_key]))
+        img_meta['data'] = seg_infer_dict[path_key]
+
+        # Update LIDAR Data to use inference from neural network
+        pc_np_infer = np.copy(pc_np)
+        point_classes, _, _ = classify_points(
+            img_meta['data'], pc_np[:, :3], img_meta, airsim_settings)
+        pc_np_infer[:, 3] = point_classes
         # handle gui
         if gui:
             # Create Frustum
@@ -119,37 +134,42 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
                            hfov=FOV, vfov=FOV,
                            frustum=geometry_set['frustum'])
 
-            # Load Images
-            img_scene = cv2.imread(str(scene_paths_dict[path_key]))
-            img_seg = cv2.imread(str(segmentation_paths_dict[path_key]))
-            img = np.concatenate((img_scene, img_seg), axis=1)
+            img = np.concatenate((img_scene, img_seg, img_seg_infer), axis=1)
             cv2.imshow('Scene View'.format(record['uid']), img)
 
             # Load Lidar Data
-            update_o3d_colored_point_cloud(pc_np, geometry_set['pcd'].geometry)
+            update_o3d_colored_point_cloud(pc_np_infer, geometry_set['pcd'].geometry)
             frustum_points = geometry_set['frustum'].line_meshes[0].points
         else:
             frustum_points = create_frustum(
                 distance_to_camera, camera_position, hfov=FOV, vfov=FOV)
 
         # Polygon Extraction of surface
+        # Only Polylidar3D
         pl_planes, alg_timings, _, _, _ = extract_polygons(pc_np, geometry_set['pl_polys'] if not segmented else None, pl, ga,
-                                                  ico, config, segmented=False, lidar_beams=lidar_beams)
+                                                           ico, config, segmented=False, lidar_beams=lidar_beams)
 
-        pl_planes_seg, alg_timings_seg, _, _, _ = extract_polygons(pc_np, geometry_set['pl_polys'] if segmented else None, pl, ga,
-                                                          ico, config, segmented=True, lidar_beams=lidar_beams)
+        # Polylidar3D with Perfect (GT) Segmentation
+        pl_planes_seg_gt, alg_timings_seg, _, _, _ = extract_polygons(pc_np, geometry_set['pl_polys'] if segmented else None, pl, ga,
+                                                                      ico, config, segmented=True, lidar_beams=lidar_beams)
+
+        # Polylidar3D with Inferred (NN) Segmentation
+        pl_planes_seg_infer, alg_timings_seg, _, _, _ = extract_polygons(pc_np_infer, geometry_set['pl_polys'] if segmented else None, pl, ga,
+                                                                         ico, config, segmented=True, lidar_beams=lidar_beams)
 
         if pl_planes and True:
             base_iou, pl_poly_estimate, gt_poly = compute_metric(
                 building_feature, pl_planes, frustum_points)
             seg_gt_iou, pl_poly_estimate_seg, _ = compute_metric(
-                building_feature, pl_planes_seg, frustum_points)
-            logger.info("Polylidar3D Base IOU - %.1f; Seg GT IOU - %.1f",
-                        base_iou * 100, seg_gt_iou * 100)
+                building_feature, pl_planes_seg_gt, frustum_points)
+            seg_infer_iou, pl_poly_estimate_seg, _ = compute_metric(
+                building_feature, pl_planes_seg_infer, frustum_points)
+            logger.info("Polylidar3D Base IOU - %.1f; Seg GT IOU - %.1f; Seg Infer IOU - %.1f",
+                        base_iou * 100, seg_gt_iou * 100, seg_infer_iou * 100)
 
             result_records.append(dict(uid=record['uid'], sub_uid=record['sub_uid'],
                                        building=bulding_label, pl_base_iou=base_iou,
-                                       pl_seg_gt_iou=seg_gt_iou,
+                                       pl_seg_gt_iou=seg_gt_iou, pl_seg_infer_iou=seg_infer_iou,
                                        **alg_timings_seg))
             # Visualize these intersections
             if gui:

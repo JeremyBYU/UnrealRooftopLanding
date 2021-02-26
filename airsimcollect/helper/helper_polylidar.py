@@ -5,6 +5,7 @@ from copy import deepcopy
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 import matplotlib.pyplot as plt
+import open3d as o3d
 
 from polylidar.polylidarutil.plane_filtering import filter_planes
 from polylidar import MatrixDouble, Polylidar3D, MatrixUInt8
@@ -16,7 +17,7 @@ from fastga.o3d_util import get_arrow, get_pc_all_peaks, get_arrow_normals
 
 from airsimcollect.helper.helper_logging import logger
 from airsimcollect.helper.helper_metrics import choose_dominant_plane_normal
-from airsimcollect.helper.helper_mesh import create_meshes_cuda, get_planar_point_density, decimate_column_opc, map_pd_to_decimate_kernel
+from airsimcollect.helper.helper_mesh import create_meshes_cuda, get_planar_point_density, decimate_column_opc, map_pd_to_decimate_kernel, create_open_3d_mesh_from_tri_mesh
 from airsimcollect.helper.o3d_util import update_linemesh
 
 
@@ -251,10 +252,11 @@ def extract_polygons(points_all, all_polys, pl, ga, ico, config,
             opc, kernel_size=decimate_kernel, num_threads=1)
 
         classes_ = points_all[:, 3].astype(np.uint8).reshape((lidar_beams, num_cols))
-        max_col = classes_.shape[1] if (classes_.shape[1] % decimate_kernel) == 0 else classes_.shape[1] - 1
+        max_col = classes_.shape[1] - (classes_.shape[1] % decimate_kernel)
         classes = np.expand_dims((classes_[:, :max_col:decimate_kernel]).flatten(), axis=1)
     else:
         classes = np.expand_dims(points_all[:, 3].astype(np.uint8), axis=1)
+    # import ipdb; ipdb.set_trace()
     # 1. Create mesh
     alg_timings = dict()
     tri_mesh, timings = create_meshes_cuda(opc, **config['mesh']['filter'])
@@ -265,6 +267,9 @@ def extract_polygons(points_all, all_polys, pl, ga, ico, config,
     classes[classes == roof_class] = 1
     classes_mat = MatrixUInt8(classes)
     tri_mesh.set_vertex_classes(classes_mat, True)
+
+    # o3d_mesh = create_open_3d_mesh_from_tri_mesh(tri_mesh)
+    # o3d.visualization.draw_geometries([o3d_mesh])
 
     # 2. Get dominant plane normals
     avg_peaks, _, _, _, timings = extract_all_dominant_plane_normals(

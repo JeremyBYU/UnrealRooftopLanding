@@ -6,6 +6,7 @@ from airsimcollect.helper.helper_logging import logger
 
 ORANGE = (255/255, 188/255, 0)
 GREEN = (0, 255/255, 0)
+BLUE = (0, 0, 255/255)
 
 colors_mapping = seg2rgb()
 
@@ -133,12 +134,12 @@ def update_o3d_colored_point_cloud(pc_np, pcd=None):
     return pc
 
 
-def update_linemesh(polygons, line_meshes):
+def update_linemesh(polygons, line_meshes, **kwargs):
     line_meshes.remove_from_vis()
     all_polys = []
     for poly_ in polygons:
         poly = poly_[0] if type(poly_) is tuple else poly_
-        lm = create_linemesh_from_shapely(poly)
+        lm = create_linemesh_from_shapely(poly, **kwargs)
         all_polys.extend(lm)
     line_meshes.line_meshes = all_polys
     if line_meshes.visible:
@@ -155,9 +156,9 @@ def create_linemesh_from_linear_ring(linear_ring, height=0, line_radius=0.15, ro
     return LineMesh(points, colors=color, radius=line_radius)
 
 
-def create_linemesh_from_shapely(polygon, height=0, line_radius=0.15, rotate_func=None):
+def create_linemesh_from_shapely(polygon, height=0, line_radius=0.15, rotate_func=None, color=GREEN, **kwargs):
     all_line_meshes = [create_linemesh_from_linear_ring(
-        polygon.exterior, height, line_radius, rotate_func, color=GREEN)]
+        polygon.exterior, height, line_radius, rotate_func, color=color)]
 
     for hole in polygon.interiors:
         all_line_meshes.append(create_linemesh_from_linear_ring(
@@ -233,12 +234,14 @@ def init_vis(width=700, height=700):
     pl_isec = VisibleLineMeshes([], vis, visible=True, name='pl_isec')
     gt_isec = VisibleLineMeshes([], vis, visible=False, name='gt_isec')
 
+    circle = VisibleLineMeshes([], vis, visible=True, name='circle_polys')
+
     # add geometries
     vis.add_geometry(axis_frame)
     # vis.add_geometry(mesh)
 
     geometry_set = dict(axis_frame=axis_frame, mesh=mesh, pcd=pcd, map_polys=map_polys,
-                        pl_polys=pl_polys, frustum=frustum, pl_isec=pl_isec, gt_isec=gt_isec)
+                        pl_polys=pl_polys, frustum=frustum, pl_isec=pl_isec, gt_isec=gt_isec, circle_polys=circle)
 
     # geometry_set = dict(pcd=pcd, map_polys=map_polys, pl_polys=[
     # ], axis_frame=axis_frame, mesh=mesh, frustum=frustum, isec_poly=isec_poly, vis_pcd=True,

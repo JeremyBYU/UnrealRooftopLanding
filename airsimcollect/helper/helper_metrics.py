@@ -1,12 +1,16 @@
+import time
 import numpy as np
 from shapely.geometry import Polygon
 from pathlib import Path
-from shapely.geometry import shape, Polygon
+from shapely.geometry import shape, Polygon, Point, asPolygon
 from os import listdir
 import json
 import shapely
 import joblib
 from airsim.types import Vector3r
+import matplotlib.pyplot as plt
+from descartes import PolygonPatch
+from polylabelfast import polylabelfast
 
 from airsimcollect.helper.o3d_util import create_linemesh_from_shapely
 
@@ -22,6 +26,39 @@ def update_state(record, position='position', rotation='rotation'):
 def convert_dict(directory, suffix='.', required_extension=''):
     return {f.split('.')[0]: directory / f for f in listdir(directory) if f.endswith(required_extension)}
 
+def tuple_to_list(tuplelist):
+    return [np.array(row)[:2].tolist() for row in list(tuplelist)]
+
+def add_column(array, z_value):
+    ones = np.ones((array.shape[0], 1)) * z_value
+    stacked = np.column_stack((array, ones))
+    return stacked
+
+def poly_to_rings(poly):
+    ext_coord = tuple_to_list(list(poly.exterior.coords))
+    holes = [tuple_to_list(ring.coords) for ring in poly.interiors]
+    holes.insert(0, ext_coord)
+    return holes
+
+def get_inscribed_circle(polygon, precision=0.1):
+    height = np.array(polygon.exterior.coords)[:, 2].mean()
+    rings = poly_to_rings(polygon)
+    t1 = time.perf_counter()
+    point_, dist_ = polylabelfast(rings, precision)
+    t2 = time.perf_counter()
+    dt = (t2-t1) * 1000
+
+    new_point = np.array([point_[0], point_[1], height])
+    return dict(point=new_point, dist=dist_, t_polylabel=dt)
+
+def get_inscribed_circle_polygon(polygon, precision=0.1):
+    circle_dict = get_inscribed_circle(polygon, precision)
+    p1 = Point(circle_dict['point'].tolist())
+    p2 = p1.buffer(circle_dict['dist'], resolution=16)
+    coords = np.array(p2.exterior.coords)
+    coords = add_column(coords, circle_dict['point'][2])
+    circle = asPolygon(coords)
+    return circle, circle_dict
 
 def found_hole(poly_gt, poly_pl:Polygon, remaining_pct=0.05):
     hole_gt = Polygon(poly_gt.interiors[0])
@@ -41,6 +78,18 @@ def found_hole(poly_gt, poly_pl:Polygon, remaining_pct=0.05):
     
     remaining_poly = hole_gt.difference(min_poly)
     remaining = remaining_poly.area / hole_gt.area
+
+    # print(remaining)
+    # fig, ax = plt.subplots(1,1)
+    # patch1 = PolygonPatch(hole_gt, fill=False)
+    # patch2 = PolygonPatch(min_poly, fill=False, ec='k')
+    # ax.add_patch(patch1)
+    # ax.add_patch(patch2)
+    # points = np.array(min_poly.exterior.coords)
+    # ax.scatter(points[:, 0], points[:, 1])
+    # plt.show()
+
+
     return remaining <= remaining_pct, remaining
 
 def compute_metric(building_feature, pl_planes, frustum_points):
@@ -52,6 +101,7 @@ def compute_metric(building_feature, pl_planes, frustum_points):
 
     base_iou = pl_poly_estimate.intersection(
         gt_poly).area / pl_poly_estimate.union(gt_poly).area
+
 
     return base_iou, pl_poly_estimate, gt_poly
 

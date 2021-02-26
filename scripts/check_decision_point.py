@@ -50,7 +50,6 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
     start_offset_unreal = np.array(records['start_offset_unreal'])
     map_features_dict = load_map(geoson_map, start_offset_unreal)
     airsim_settings = records.get('airsim_settings', dict())
-    lidar_beams = airsim_settings.get('lidar_beams', 64)
     range_noise = airsim_settings.get('range_noise', 0.05)
     # have to turn some json keys into proper objects, quaternions...
     update_state(airsim_settings, position='lidar_to_camera_pos',
@@ -91,9 +90,12 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
     for record in records['records']:
         path_key = f"{record['uid']}-{record['sub_uid']}-0"
         bulding_label = record['label']  # building name
-
+        lidar_beams = record.get('lidar_beams', 64)
         logger.info("Inspecting record; UID: %s; SUB-UID: %s; Height: %s; LiDAR Range Noise: %s; LiDAR Beams: %s",
-                    record['uid'], record['sub_uid'], record['height'], record['range_noise'], record['lidar_beams'])
+                    record['uid'], record['sub_uid'], record['height'], record['range_noise'], lidar_beams)
+
+        # if record['uid'] < 60 or record['sub_uid'] < 0:
+        #     continue
         # Get camera data
         img_meta = record['sensors'][0]
         update_state(img_meta)
@@ -105,6 +107,10 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
 
         # Load LiDAR Data
         pc_np = np.load(str(lidar_paths_dict[path_key]))
+        num_valid_points = np.count_nonzero(~np.isnan(pc_np[:, :3]))
+        if num_valid_points < 4:
+            logger.warn("Point cloud is fully nan. Skipping...")
+            continue
         # Load Images
         img_scene = cv2.imread(str(scene_paths_dict[path_key]))
         img_seg = cv2.imread(str(segmentation_paths_dict[path_key]))
@@ -116,6 +122,7 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
         point_classes, _, _ = classify_points(
             img_meta['data'], pc_np[:, :3], img_meta, airsim_settings)
         pc_np_infer[:, 3] = point_classes
+        # import ipdb; ipdb.set_trace()
         # handle gui
         if gui:
             # Create Frustum
@@ -154,8 +161,8 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
             seg_infer_iou, pl_poly_estimate_seg, _ = compute_metric(
                 building_feature, pl_planes_seg_infer, frustum_points)
             success, remaining = found_hole(gt_poly, pl_poly_estimate_seg)
-            logger.info("Polylidar3D Base IOU - %.1f; Seg GT IOU - %.1f; Seg Infer IOU - %.1f; Found Hole - %s",
-                        base_iou * 100, seg_gt_iou * 100, seg_infer_iou * 100, success)
+            logger.info("Polylidar3D Base IOU - %.1f; Seg GT IOU - %.1f; Seg Infer IOU - %.1f; Found Hole - %s; Remaining - %.2f",
+                        base_iou * 100, seg_gt_iou * 100, seg_infer_iou * 100, success, remaining)
 
             # if not success:
             #     import ipdb; ipdb.set_trace()
@@ -175,9 +182,17 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
                     pl_poly_estimate = pl_poly_estimate_seg
                 update_linemesh([pl_poly_estimate], geometry_set['pl_isec'])
                 update_linemesh([gt_poly], geometry_set['gt_isec'])
-        elif gui:
-            update_linemesh([], geometry_set['pl_isec'])
-            update_linemesh([], geometry_set['gt_isec'])
+        else:
+            result_records.append(dict(uid=record['uid'], sub_uid=record['sub_uid'],
+                                       building=bulding_label, pl_base_iou=0,
+                                       pl_seg_gt_iou=0, pl_seg_infer_iou=0,
+                                       height=record['height'], range_noise=record['range_noise'],
+                                       lidar_beams=record['lidar_beams'],
+                                       found_hole=False, hole_remaining=1,
+                                       **alg_timings_seg))
+            if gui:
+                update_linemesh([], geometry_set['pl_isec'])
+                update_linemesh([], geometry_set['gt_isec'])
 
         if gui:
             # Update geometry and view

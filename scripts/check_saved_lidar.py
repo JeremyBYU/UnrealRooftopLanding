@@ -1,15 +1,14 @@
 """Will check all the lidar returned
 """
-import logging
-import json
-import sys
 from pathlib import Path
 from os import listdir
 from os.path import isfile, join
 from functools import partial
 import argparse
+import time
 
 import yaml
+# import matplotlib.pyplot as plt
 from rich import print as rprint
 import numpy as np
 from shapely.geometry import shape, Polygon
@@ -21,10 +20,10 @@ import pandas as pd
 from airsimcollect.helper.helper_logging import logger
 from airsimcollect.helper.o3d_util import (update_linemesh, handle_linemeshes, init_vis, create_frustum,
                                            update_o3d_colored_point_cloud, create_linemesh_from_shapely,
-                                           update_frustum, load_view_point, save_view_point, toggle_visibility)
+                                           update_frustum, load_view_point, save_view_point, toggle_visibility, BLUE)
 from airsimcollect.helper.helper_transforms import classify_points
 from airsimcollect.helper.helper_metrics import (
-    load_map, select_building, load_map, load_records, compute_metric, update_state)
+    load_map, select_building, load_map, load_records, compute_metric, update_state, get_inscribed_circle_polygon)
 from airsimcollect.helper.helper_polylidar import extract_polygons
 
 from fastga import GaussianAccumulatorS2Beta, IcoCharts
@@ -39,7 +38,7 @@ O3D_VIEW = ROOT_DIR / Path("assets/o3d/o3d_view_default.json")
 FOV = 90
 
 
-def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
+def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, computer='desktop'):
     records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict, seg_infer_path_dict, seg_infer_dict = load_records(
         save_data_dir)
 
@@ -120,8 +119,11 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
 
         # Update LIDAR Data to use inference from neural network
         pc_np_infer = np.copy(pc_np)
+        t1 = time.perf_counter()
         point_classes, _, _ = classify_points(
             img_meta['data'], pc_np[:, :3], img_meta, airsim_settings)
+        t2 = time.perf_counter()
+        t_classify_pointcloud = (t2-t1) * 1000
         pc_np_infer[:, 3] = point_classes
         # handle gui
         if gui:
@@ -152,7 +154,7 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
         # Polylidar3D with Inferred (NN) Segmentation
         pl_planes_seg_infer, alg_timings_seg, _, _, _ = extract_polygons(pc_np_infer, geometry_set['pl_polys'] if segmented else None, pl, ga,
                                                                          ico, config, segmented=True, lidar_beams=lidar_beams)
-
+        alg_timings_seg.update(t_classify_pointcloud=t_classify_pointcloud)
         if pl_planes and True:
             base_iou, pl_poly_estimate, gt_poly = compute_metric(
                 building_feature, pl_planes, frustum_points)
@@ -163,9 +165,14 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
             logger.info("Polylidar3D Base IOU - %.1f; Seg GT IOU - %.1f; Seg Infer IOU - %.1f",
                         base_iou * 100, seg_gt_iou * 100, seg_infer_iou * 100)
 
+            # Get Largest Inscribed Circle
+            circle_poly, circle = get_inscribed_circle_polygon(pl_poly_estimate_seg, config['polylabel']['precision'])
+            alg_timings_seg.update(t_polylabel=circle['t_polylabel'])
+
             result_records.append(dict(uid=record['uid'], sub_uid=record['sub_uid'],
                                        building=bulding_label, pl_base_iou=base_iou,
                                        pl_seg_gt_iou=seg_gt_iou, pl_seg_infer_iou=seg_infer_iou,
+                                       computer=computer,
                                        **alg_timings_seg))
             # Visualize these intersections
             if gui:
@@ -174,9 +181,11 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
                     pl_poly_estimate = pl_poly_estimate_seg
                 update_linemesh([pl_poly_estimate], geometry_set['pl_isec'])
                 update_linemesh([gt_poly], geometry_set['gt_isec'])
+                update_linemesh([circle_poly], geometry_set['circle_polys'], color=BLUE)
         elif gui:
             update_linemesh([], geometry_set['pl_isec'])
             update_linemesh([], geometry_set['gt_isec'])
+            update_linemesh([], geometry_set['circle_polys'])
 
         if gui:
             # Update geometry and view
@@ -189,6 +198,7 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
                 if res != -1:
                     break
     df = pd.DataFrame.from_records(result_records)
+    print(df)
     df['iou_diff'] = df['pl_base_iou'] - df['pl_seg_gt_iou']
     df.to_csv(RESULTS_DIR / results_fname)
     print(df.mean())

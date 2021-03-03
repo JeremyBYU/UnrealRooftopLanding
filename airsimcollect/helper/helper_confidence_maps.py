@@ -4,7 +4,7 @@ import cv2
 import shapely
 from skimage.transform import rescale
 from astropy.convolution import convolve, Box2DKernel
-from airsimcollect.helper.helper_transforms import colors2class, get_pixels_from_points, get_transforms, create_homogenous_transform, create_projection_matrix, affine_points_pixels
+from airsimcollect.helper.helper_transforms import colors2class, points_to_pixels, get_transforms, create_homogenous_transform, create_projection_matrix, affine_points_pixels
 from shapely.geometry import Polygon
 
 
@@ -182,7 +182,7 @@ def create_confidence_map_segmentation(seg_img, img_meta, airsim_settings, trian
     box_kernel = Box2DKernel(3)
     raster_seg = create_raster_from_bbox(poly_bbox)
 
-    pixels_seg, mask = get_pixels_from_points(triangle_centroids, img_meta, airsim_settings) # slow
+    pixels_seg, mask = points_to_pixels(triangle_centroids, img_meta, airsim_settings) # slow
     seg_values = seg_img[pixels_seg[:, 1], pixels_seg[:, 0]]
     seg_img[pixels_seg[:, 1], pixels_seg[:, 0]] = 0.5
     triangle_pixels = triangle_pixels[mask, :]
@@ -212,7 +212,7 @@ def create_confidence_map_planarity(tri_mesh, img_meta, airsim_settings, ds=4):
     triangles_planarity = triangle_normals_np @ np.array([[0], [0], [-1]])
     t4 = time.perf_counter()
     #
-    pixels, mask = get_pixels_from_points(
+    pixels, mask = points_to_pixels(
         triangle_centroids, img_meta_copy, airsim_settings) # slow
     t5 = time.perf_counter()
     triangles_planarity_filt = np.squeeze(triangles_planarity[mask, :])

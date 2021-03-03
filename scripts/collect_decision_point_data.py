@@ -1,3 +1,11 @@
+"""Will collect and save data from AirSim for a decision point analysis
+Will command the drone to fly at several height levels and take observations
+from a 4X4 meter grid over human ontop of a rooftop
+
+When run repeatidly, it will not override saved data but simply "append" to it
+This allows one to change settings in AirSim (number of beams)
+
+"""
 import argparse
 import json
 import logging

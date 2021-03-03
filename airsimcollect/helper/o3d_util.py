@@ -236,11 +236,19 @@ def init_vis(width=700, height=700):
 
     circle = VisibleLineMeshes([], vis, visible=True, name='circle_polys')
 
+    # get_image_data(client)
+    drone = o3d.io.read_triangle_mesh('assets/models/drone2.ply')
+    rot = o3d.geometry.get_rotation_matrix_from_xyz([np.pi/2, 0, 0])
+    drone = drone.rotate(rot, drone.get_center())
+    drone.compute_triangle_normals()
+    drone.compute_vertex_normals()
+    drone_ = VisibleGeometry(drone, vis, visible=True, name='drone')
+
     # add geometries
     vis.add_geometry(axis_frame)
     # vis.add_geometry(mesh)
 
-    geometry_set = dict(axis_frame=axis_frame, mesh=mesh, pcd=pcd, map_polys=map_polys,
+    geometry_set = dict(axis_frame=axis_frame, mesh=mesh, pcd=pcd, map_polys=map_polys, drone=drone_,
                         pl_polys=pl_polys, frustum=frustum, pl_isec=pl_isec, gt_isec=gt_isec, circle_polys=circle)
 
     # geometry_set = dict(pcd=pcd, map_polys=map_polys, pl_polys=[

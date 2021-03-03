@@ -10,6 +10,8 @@ from os import path
 import json
 import warnings
 import time
+from shapely.geometry import Polygon
+from airsimcollect.helper.helper_logging import logger
 
 
 # ignore quaternions warning about numba not being installed
@@ -70,17 +72,22 @@ def create_homogenous_transform(cam_pos=lidar_to_camera_pos, cam_quat=lidar_to_c
     return hom_tran
 
 
-def project_points_img(points, proj_mat, width, height, points_orig):
+def project_points_img(points, proj_mat, width, height, filter_pixels=True):
     pixels = proj_mat.dot(points)
     pixels = np.divide(pixels[:2, :], pixels[2, :]).transpose()
     pixels = np.rint(pixels).astype(np.int)
 
-    # Remove pixels that are outside the image
-    mask_x = (pixels[:, 0] < width) & (pixels[:, 0] >= 0)
-    mask_y = (pixels[:, 1] < height) & (pixels[:, 1] >= 0)
-    mask = mask_x & mask_y
-    # Return the pixels and points that are inside the image
-    pixels = pixels[mask]
+    if filter_pixels:
+        # Remove pixels that are outside the image
+        mask_x = (pixels[:, 0] < width) & (pixels[:, 0] >= 0)
+        mask_y = (pixels[:, 1] < height) & (pixels[:, 1] >= 0)
+        mask = mask_x & mask_y
+        # Return the pixels and points that are inside the image
+        pixels = pixels[mask]
+    else:
+        mask = None
+        pixels[:, 0] = np.clip(pixels[:, 0], 0, width)
+        pixels[:, 1] = np.clip(pixels[:, 1], 0, height)
     return pixels, mask
 
 
@@ -134,7 +141,7 @@ def get_pixels_from_points(points, img_meta, airsim_settings):
         points, cam_pos=transform_pos, cam_quat=transform_rot, invert=invert, points_in_unreal=False)
     # Project Points into image, filter points outside of image
     pixels, mask = project_points_img(
-        points_transformed, proj_mat, width, height, points)
+        points_transformed, proj_mat, width, height)
     return pixels, mask
 
 def classify_points(img, points, img_meta, airsim_settings):
@@ -149,7 +156,7 @@ def classify_points(img, points, img_meta, airsim_settings):
         points, cam_pos=transform_pos, cam_quat=transform_rot, invert=invert, points_in_unreal=False)
     # Project Points into image, filter points outside of image
     pixels, mask = project_points_img(
-        points_transformed, proj_mat, width, height, points)
+        points_transformed, proj_mat, width, height)
 
     colors = get_colors_from_image(pixels, img)
     if len(img.shape) > 2:
@@ -161,6 +168,31 @@ def classify_points(img, points, img_meta, airsim_settings):
     all_colors[mask] = colors
 
     return all_colors, mask, pixels
+
+def points_to_pixels(points, img_meta, airsim_settings):
+    height = img_meta['height']
+    width = img_meta['width']
+    transform_pos, transform_rot, invert = get_transforms(
+        img_meta, airsim_settings)
+
+    proj_mat = create_projection_matrix(height, width)
+    # Transform NED points to camera coordinate system (not NED)
+    points_transformed = transform_to_cam(
+        points, cam_pos=transform_pos, cam_quat=transform_rot, invert=invert, points_in_unreal=False)
+    # Project Points into image, filter points outside of image
+    pixels, mask = project_points_img(
+        points_transformed, proj_mat, width, height, filter_pixels=False)
+    return pixels, mask
+
+def polygon_to_pixel_coords(polygon, img_meta, airsim_settings):
+    exterior_pixels, _ = points_to_pixels(np.array(polygon.exterior.coords), img_meta, airsim_settings)
+    holes_pixels = []
+    for hole in list(polygon.interiors):
+        hole_pixel, _ = points_to_pixels(np.array(hole), img_meta, airsim_settings)
+        holes_pixels.append(hole_pixel)
+
+    poly_pixel = Polygon(shell=exterior_pixels, holes=holes_pixels)
+    return poly_pixel
 
 
 def get_image_data(client: airsim.MultirotorClient, compress=True):

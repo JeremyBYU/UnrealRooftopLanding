@@ -94,8 +94,8 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False):
         logger.info("Inspecting record; UID: %s; SUB-UID: %s; Height: %s; LiDAR Range Noise: %s; LiDAR Beams: %s",
                     record['uid'], record['sub_uid'], record['height'], record['range_noise'], lidar_beams)
 
-        # if record['uid'] < 60 or record['sub_uid'] < 0:
-        #     continue
+        if record['uid'] < 0 or record['sub_uid'] < 0:
+            continue
         # Get camera data
         img_meta = record['sensors'][0]
         update_state(img_meta)

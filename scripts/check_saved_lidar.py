@@ -21,7 +21,7 @@ from airsimcollect.helper.helper_logging import logger
 from airsimcollect.helper.o3d_util import (update_linemesh, handle_linemeshes, init_vis, create_frustum,
                                            update_o3d_colored_point_cloud, create_linemesh_from_shapely,
                                            update_frustum, load_view_point, save_view_point, toggle_visibility, BLUE)
-from airsimcollect.helper.helper_transforms import classify_points
+from airsimcollect.helper.helper_transforms import classify_points, polygon_to_pixel_coords
 from airsimcollect.helper.helper_metrics import (
     load_map, select_building, load_map, load_records, compute_metric, update_state, get_inscribed_circle_polygon)
 from airsimcollect.helper.helper_polylidar import extract_polygons
@@ -37,8 +37,22 @@ RESULTS_DIR = ROOT_DIR / Path("assets/results")
 O3D_VIEW = ROOT_DIR / Path("assets/o3d/o3d_view_default.json")
 FOV = 90
 
+ORANGE_NORM = [0,165,255]
+BLUE_NORM = [255, 0, 0]
+BRIGHT_GREEN_NORM = [0, 255, 0]
+DARK_GREEN_NORM = [0, 112, 0]
 
-def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, computer='desktop'):
+# Nice Pictures UIDs - 38, 39
+# Bad Segmentation Drone but still success - 40
+
+def plot_opencv_polys(image, polygon, color_exterior=DARK_GREEN_NORM, color_interior=ORANGE_NORM, thickness=2):
+    pix_coords = np.array(polygon.exterior.coords).astype(np.int32).reshape((-1, 1, 2))
+    cv2.polylines(image, [pix_coords], True, color_exterior, thickness=thickness)
+    for hole in polygon.interiors:
+        pix_coords = np.array(hole).astype(np.int32).reshape((-1, 1, 2))
+        cv2.polylines(image, [pix_coords], True, color_interior, thickness=thickness)
+        
+def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, computer='desktop', save_images=True):
     records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict, seg_infer_path_dict, seg_infer_dict = load_records(
         save_data_dir)
 
@@ -83,6 +97,8 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
             toggle_visibility, geometry_set, 'pl_isec'))
         vis.register_key_callback(ord("M"), partial(
             toggle_visibility, geometry_set, 'gt_isec'))
+        vis.register_key_callback(ord(","), partial(
+            toggle_visibility, geometry_set, 'circle_polys'))
     else:
         geometry_set = dict(pl_polys=None)
 
@@ -116,30 +132,24 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
         img_seg = cv2.imread(str(segmentation_paths_dict[path_key]))
         img_seg_infer = cv2.imread(str(seg_infer_path_dict[path_key]))
         img_meta['data'] = seg_infer_dict[path_key]
+        # Combine all images
+        img = np.concatenate((img_scene, img_seg, img_seg_infer), axis=1)
 
         # Update LIDAR Data to use inference from neural network
         pc_np_infer = np.copy(pc_np)
         t1 = time.perf_counter()
-        point_classes, _, _ = classify_points(
+        point_classes, mask, pixels = classify_points(
             img_meta['data'], pc_np[:, :3], img_meta, airsim_settings)
         t2 = time.perf_counter()
         t_classify_pointcloud = (t2-t1) * 1000
         pc_np_infer[:, 3] = point_classes
-        # handle gui
-        if gui:
-            # Create Frustum
-            update_frustum(vis, distance_to_camera, camera_position,
-                           hfov=FOV, vfov=FOV,
-                           frustum=geometry_set['frustum'])
 
-            img = np.concatenate((img_scene, img_seg, img_seg_infer), axis=1)
-            cv2.imshow('Scene View'.format(record['uid']), img)
+        # Update projected image to have lidar data
+        img_projected = np.copy(img_scene)
+        img_projected[pixels[:,1], pixels[:, 0]] = [0, 255,0]
 
-            # Load Lidar Data
-            update_o3d_colored_point_cloud(pc_np_infer, geometry_set['pcd'].geometry)
-            frustum_points = geometry_set['frustum'].line_meshes[0].points
-        else:
-            frustum_points = create_frustum(
+        # Points that define the camera FOV frustum
+        frustum_points = create_frustum(
                 distance_to_camera, camera_position, hfov=FOV, vfov=FOV)
 
         # Polygon Extraction of surface
@@ -174,6 +184,12 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
                                        pl_seg_gt_iou=seg_gt_iou, pl_seg_infer_iou=seg_infer_iou,
                                        computer=computer,
                                        **alg_timings_seg))
+
+            circle_poly_pix = polygon_to_pixel_coords(circle_poly, img_meta, airsim_settings)
+            pl_planes_pix = polygon_to_pixel_coords(pl_poly_estimate_seg, img_meta, airsim_settings)
+
+            plot_opencv_polys(img_projected, circle_poly_pix, color_exterior=BLUE_NORM)
+            plot_opencv_polys(img_projected, pl_planes_pix, color_exterior=DARK_GREEN_NORM)
             # Visualize these intersections
             if gui:
                 # Visualize the polylidar with segmentation results
@@ -187,7 +203,21 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
             update_linemesh([], geometry_set['gt_isec'])
             update_linemesh([], geometry_set['circle_polys'])
 
+        if save_images:
+            pass
+
         if gui:
+            # Create Frustum
+            update_frustum(vis, distance_to_camera, camera_position,
+                           hfov=FOV, vfov=FOV,
+                           frustum=geometry_set['frustum'])
+            # Load Lidar Data
+            update_o3d_colored_point_cloud(pc_np_infer, geometry_set['pcd'].geometry)
+            # Update Drone Position
+            geometry_set['drone'].geometry.translate(img_meta['position'].to_numpy_array(), relative=False)
+            # Update Plot Images
+            img = np.concatenate((img, img_projected), axis=1)
+            cv2.imshow('Scene View'.format(record['uid']), img)
             # Update geometry and view
             vis.update_geometry(geometry_set['pcd'].geometry)
             vis.update_renderer()

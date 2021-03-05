@@ -7,6 +7,7 @@ from airsimcollect.helper.helper_logging import logger
 ORANGE = (255/255, 188/255, 0)
 GREEN = (0, 255/255, 0)
 BLUE = (0, 0, 255/255)
+PURPLE = [199/255, 36/255, 177/255]
 
 colors_mapping = seg2rgb()
 

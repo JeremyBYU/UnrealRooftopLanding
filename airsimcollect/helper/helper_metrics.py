@@ -11,9 +11,113 @@ from airsim.types import Vector3r
 import matplotlib.pyplot as plt
 from descartes import PolygonPatch
 from polylabelfast import polylabelfast
+import cv2
 
 from airsimcollect.helper.o3d_util import create_linemesh_from_shapely
+from airsimcollect.helper.helper_transforms import polygon_to_pixel_coords
 
+
+# BGR Notation
+ORANGE_NORM = [0,165,255]
+BLUE_NORM = [255, 0, 0]
+BRIGHT_GREEN_NORM = [0, 255, 0]
+DARK_GREEN_NORM = [0, 112, 0]
+GOLD_NORM = [0, 204, 255]
+PURPLE_NORM = [177, 36, 199]
+
+# Nice Pictures UIDs - 38, 39
+# Bad Segmentation Drone but still success - 40
+
+def create_star(x, y, size=10):
+    coords = []
+    for i in range(5):
+        x_outer = size * np.cos(2 * np.pi * i/5.0  + np.pi/2.0)
+        y_outer = size * np.sin(2 * np.pi * i/5.0  + np.pi/2.0)
+
+        x_inner = size/2.0 * np.cos(2 * np.pi * i/5.0  + np.pi/2.0 + 2*np.pi/10.0)
+        y_inner = size/2.0 * np.sin(2 * np.pi * i/5.0  + np.pi/2.0 + 2*np.pi/10.0)
+
+        coords.append([x_outer, y_outer])
+        coords.append([x_inner, y_inner])
+    coords = np.array(coords)
+    coords = coords + [x,y]
+    return coords
+
+def create_star_poly(x, y, size=10):
+    star = create_star(x, y, size)
+    return Polygon(star)
+
+def drawline(img,pt1,pt2,color,thickness=1,style='dotted',gap=20):
+    dist =((pt1[0]-pt2[0])**2+(pt1[1]-pt2[1])**2)**.5
+    pts= []
+    for i in  np.arange(0,dist,gap):
+        r=i/dist
+        x=int((pt1[0]*(1-r)+pt2[0]*r)+.5)
+        y=int((pt1[1]*(1-r)+pt2[1]*r)+.5)
+        p = (x,y)
+        pts.append(p)
+
+    if dist < gap:
+        s = tuple(pt1)
+        e = tuple(pt2)
+        # print(s)
+        cv2.line(img,s,e,color,thickness)
+        return
+    if style=='dotted':
+        for p in pts:
+            cv2.circle(img,p,thickness,color,-1)
+    else:
+        s=pts[0]
+        e=pts[0]
+        i=0
+        for p in pts:
+            s=e
+            e=p
+            if i%2==1:
+                cv2.line(img,s,e,color,thickness)
+            i+=1
+
+def drawspecialpoly(img,coords,color,thickness=1,style='dotted',):
+    pts = np.array(coords).tolist()
+    s=pts[0]
+    e=pts[0]
+    pts.append(pts.pop(0))
+    for p in pts:
+        s=e
+        e=p
+        drawline(img,s,e,color,thickness,style)
+
+def plot_opencv_polys(image, polygon, color_exterior=DARK_GREEN_NORM, color_interior=ORANGE_NORM, thickness=5, fill=True, style='solid'):
+    pix_coords = np.array(polygon.exterior.coords).astype(np.int32)
+    pix_coords_cv = pix_coords.reshape((-1, 1, 2))
+    if fill:
+        cv2.fillPoly(image, [pix_coords_cv], color_exterior)
+    elif style == 'solid':
+        cv2.polylines(image, [pix_coords_cv], False, color_exterior, thickness=thickness)
+    else:
+        drawspecialpoly(image, pix_coords, color_exterior, thickness, style=style)
+    for hole in polygon.interiors:
+        pix_coords = np.array(hole).astype(np.int32)
+        pix_coords_cv = pix_coords.reshape((-1, 1, 2))
+        if style == 'solid':
+            cv2.polylines(image, [pix_coords], False, color_interior, thickness=thickness)
+        else:
+            drawspecialpoly(image, pix_coords, color_exterior, thickness, style=style)
+
+def update_projected_image(img, circle_poly, pl_poly, gt_poly, lidar_pixels, img_meta, airsim_settings, ):
+    circle_poly_pix = polygon_to_pixel_coords(circle_poly, img_meta, airsim_settings)
+    pl_poly_pix = polygon_to_pixel_coords(pl_poly, img_meta, airsim_settings)
+    gt_poly_pix = polygon_to_pixel_coords(gt_poly, img_meta, airsim_settings)
+    star_poly_pix = create_star_poly(circle_poly_pix.centroid.x, circle_poly_pix.centroid.y)
+
+    img[lidar_pixels[:,1], lidar_pixels[:, 0]] = [0, 255,0]
+    # for i in range(lidar_pixels.shape[0]):
+    #     cv2.circle(img,tuple(lidar_pixels[i,:]), 1, (0,255,0), -1)
+
+    plot_opencv_polys(img, pl_poly_pix, fill=False)
+    plot_opencv_polys(img, circle_poly_pix, color_exterior=BLUE_NORM, fill=False)
+    plot_opencv_polys(img, gt_poly_pix, fill=False, color_exterior=PURPLE_NORM, style='dashed')
+    plot_opencv_polys(img, star_poly_pix, color_exterior=GOLD_NORM, fill=True)
 
 def update_state(record, position='position', rotation='rotation'):
     position_data = record[position] if isinstance(

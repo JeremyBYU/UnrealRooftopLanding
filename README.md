@@ -67,7 +67,7 @@ Next we will launch AirSim in Computer Vision mode and collect scene (rgb) and s
 1. `asc collect -c assets/config/collect_cv_train.json`
 2. `asc collect -c assets/config/collect_cv_test.json`
 
-### Generate Images and LiDAR data from AirSim
+### Generate Images and LiDAR data from AirSim for Testing
 
 Next we will launch AirSim in `Multirotor` mode. This time we will generate images and LiDAR point clouds from the collection points mentioned previously. Data is saved inside the folder `AirSimCollectData`. Be sure to update your AirSim settings in your home directory to use the multirotor.
 

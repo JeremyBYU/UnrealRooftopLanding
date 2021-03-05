@@ -20,9 +20,9 @@ import pandas as pd
 from airsimcollect.helper.helper_logging import logger
 from airsimcollect.helper.o3d_util import (update_linemesh, handle_linemeshes, init_vis, create_frustum,
                                            update_o3d_colored_point_cloud, create_linemesh_from_shapely,
-                                           update_frustum, load_view_point, save_view_point, toggle_visibility, BLUE)
+                                           update_frustum, load_view_point, save_view_point, toggle_visibility, BLUE, PURPLE)
 from airsimcollect.helper.helper_transforms import classify_points, polygon_to_pixel_coords
-from airsimcollect.helper.helper_metrics import (
+from airsimcollect.helper.helper_metrics import (update_projected_image, BLUE_NORM, GOLD_NORM, PURPLE_NORM,
     load_map, select_building, load_map, load_records, compute_metric, update_state, get_inscribed_circle_polygon)
 from airsimcollect.helper.helper_polylidar import extract_polygons
 
@@ -37,25 +37,16 @@ RESULTS_DIR = ROOT_DIR / Path("assets/results")
 O3D_VIEW = ROOT_DIR / Path("assets/o3d/o3d_view_default.json")
 FOV = 90
 
-ORANGE_NORM = [0,165,255]
-BLUE_NORM = [255, 0, 0]
-BRIGHT_GREEN_NORM = [0, 255, 0]
-DARK_GREEN_NORM = [0, 112, 0]
-
-# Nice Pictures UIDs - 38, 39
-# Bad Segmentation Drone but still success - 40
-
-def plot_opencv_polys(image, polygon, color_exterior=DARK_GREEN_NORM, color_interior=ORANGE_NORM, thickness=2):
-    pix_coords = np.array(polygon.exterior.coords).astype(np.int32).reshape((-1, 1, 2))
-    cv2.polylines(image, [pix_coords], True, color_exterior, thickness=thickness)
-    for hole in polygon.interiors:
-        pix_coords = np.array(hole).astype(np.int32).reshape((-1, 1, 2))
-        cv2.polylines(image, [pix_coords], True, color_interior, thickness=thickness)
-        
-def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, computer='desktop', save_images=True):
+# Nice Pictures UIDs - 31, 34, 38, 39, 42, 45
+# Bad Segmentation Drone but still success - 40, 41,
+       
+def main(save_data_dir:Path, geoson_map, results_fname, gui=True, segmented=False, computer='desktop', save_images=True):
     records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict, seg_infer_path_dict, seg_infer_dict = load_records(
         save_data_dir)
 
+    output_dir = (save_data_dir / "Output")
+    output_dir.mkdir(parents=False, exist_ok=True)
+        
     # Load yaml file
     with open('./assets/config/PolylidarParams.yaml') as file:
         config = yaml.safe_load(file)
@@ -99,6 +90,10 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
             toggle_visibility, geometry_set, 'gt_isec'))
         vis.register_key_callback(ord(","), partial(
             toggle_visibility, geometry_set, 'circle_polys'))
+        vis.register_key_callback(ord("U"), partial(
+            save_view_point, filename='temp.json'))
+        vis.register_key_callback(ord("Y"), partial(
+            load_view_point, filename='temp.json'))
     else:
         geometry_set = dict(pl_polys=None)
 
@@ -111,7 +106,7 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
                         record['uid'], record['sub_uid'], bulding_label)
             continue
         # uid #45 is best segmentation example
-        # if record['uid'] < 59:
+        # if record['uid'] < 10:
         #     continue
 
         logger.info("Inspecting record; UID: %s; SUB-UID: %s; Building Name: %s",
@@ -146,7 +141,6 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
 
         # Update projected image to have lidar data
         img_projected = np.copy(img_scene)
-        img_projected[pixels[:,1], pixels[:, 0]] = [0, 255,0]
 
         # Points that define the camera FOV frustum
         frustum_points = create_frustum(
@@ -166,7 +160,7 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
                                                                          ico, config, segmented=True, lidar_beams=lidar_beams)
         alg_timings_seg.update(t_classify_pointcloud=t_classify_pointcloud)
         if pl_planes and True:
-            base_iou, pl_poly_estimate, gt_poly = compute_metric(
+            base_iou, pl_poly_baseline, gt_poly = compute_metric(
                 building_feature, pl_planes, frustum_points)
             seg_gt_iou, pl_poly_estimate_seg, _ = compute_metric(
                 building_feature, pl_planes_seg_gt, frustum_points)
@@ -177,6 +171,7 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
 
             # Get Largest Inscribed Circle
             circle_poly, circle = get_inscribed_circle_polygon(pl_poly_estimate_seg, config['polylabel']['precision'])
+            circle_poly_baseline, circle_baseline = get_inscribed_circle_polygon(pl_poly_baseline, config['polylabel']['precision'])
             alg_timings_seg.update(t_polylabel=circle['t_polylabel'])
 
             result_records.append(dict(uid=record['uid'], sub_uid=record['sub_uid'],
@@ -185,18 +180,18 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
                                        computer=computer,
                                        **alg_timings_seg))
 
-            circle_poly_pix = polygon_to_pixel_coords(circle_poly, img_meta, airsim_settings)
-            pl_planes_pix = polygon_to_pixel_coords(pl_poly_estimate_seg, img_meta, airsim_settings)
 
-            plot_opencv_polys(img_projected, circle_poly_pix, color_exterior=BLUE_NORM)
-            plot_opencv_polys(img_projected, pl_planes_pix, color_exterior=DARK_GREEN_NORM)
+            img_projected_baseline = np.copy(img_projected)
+            # img_projected[pixels[:,1], pixels[:, 0]] = [0, 255,0]
+            update_projected_image(img_projected, circle_poly, pl_poly_estimate_seg, gt_poly, pixels, img_meta, airsim_settings)
+            update_projected_image(img_projected_baseline, circle_poly_baseline, pl_poly_baseline, gt_poly, pixels, img_meta, airsim_settings)
             # Visualize these intersections
             if gui:
                 # Visualize the polylidar with segmentation results
                 if segmented:
-                    pl_poly_estimate = pl_poly_estimate_seg
-                update_linemesh([pl_poly_estimate], geometry_set['pl_isec'])
-                update_linemesh([gt_poly], geometry_set['gt_isec'])
+                    pl_poly_baseline = pl_poly_estimate_seg
+                update_linemesh([pl_poly_baseline], geometry_set['pl_isec'])
+                update_linemesh([gt_poly], geometry_set['gt_isec'], color=PURPLE)
                 update_linemesh([circle_poly], geometry_set['circle_polys'], color=BLUE)
         elif gui:
             update_linemesh([], geometry_set['pl_isec'])
@@ -204,7 +199,11 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
             update_linemesh([], geometry_set['circle_polys'])
 
         if save_images:
-            pass
+            baseline_fname = output_dir / "{}-projected-baseline.png".format(path_key)
+            semantic_fname = output_dir / "{}-projected-semantic.png".format(path_key)
+            cv2.imwrite(str(baseline_fname), img_projected_baseline)
+            cv2.imwrite(str(semantic_fname), img_projected)
+
 
         if gui:
             # Create Frustum
@@ -216,10 +215,11 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
             # Update Drone Position
             geometry_set['drone'].geometry.translate(img_meta['position'].to_numpy_array(), relative=False)
             # Update Plot Images
-            img = np.concatenate((img, img_projected), axis=1)
+            img = np.concatenate((img, img_projected, img_projected_baseline), axis=1)
             cv2.imshow('Scene View'.format(record['uid']), img)
             # Update geometry and view
             vis.update_geometry(geometry_set['pcd'].geometry)
+            vis.update_geometry(geometry_set['drone'].geometry)
             vis.update_renderer()
             while(True):
                 vis.poll_events()
@@ -232,6 +232,8 @@ def main(save_data_dir, geoson_map, results_fname, gui=True, segmented=False, co
     df['iou_diff'] = df['pl_base_iou'] - df['pl_seg_gt_iou']
     df.to_csv(RESULTS_DIR / results_fname)
     print(df.mean())
+
+
 
 
 def parse_args():

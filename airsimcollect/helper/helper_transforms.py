@@ -86,8 +86,8 @@ def project_points_img(points, proj_mat, width, height, filter_pixels=True):
         pixels = pixels[mask]
     else:
         mask = None
-        pixels[:, 0] = np.clip(pixels[:, 0], 0, width)
-        pixels[:, 1] = np.clip(pixels[:, 1], 0, height)
+        pixels[:, 0] = np.clip(pixels[:, 0], 3, width - 3)
+        pixels[:, 1] = np.clip(pixels[:, 1], 3, height - 3)
     return pixels, mask
 
 

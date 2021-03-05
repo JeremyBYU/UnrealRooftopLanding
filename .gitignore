@@ -4,6 +4,7 @@ assets/maps/**/*.txt
 assets/maps/**/*.npy
 assets/maps/archive
 assets/imgs/assets
+temp.json
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

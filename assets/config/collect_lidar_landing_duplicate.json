@@ -1,0 +1,63 @@
+{
+  "name": "AirSimCollect",
+  "sim_mode": "Multirotor",
+  "save_dir": "AirSimCollectData/LidarRoofManualTestDuplicate",
+  "segmentation_codes": [
+    ["[\\w*. \\s-]*", 0],
+    ["BP_LightStudio.*", 1],
+    ["GroundArea.*", 2],
+    [".*ground.*", 2],
+    ["Intersection.*", 2],
+    ["Landscape.*", 2],
+    ["Building.*[.].*", 3],
+    [".*BLD_WALL.*", 3],
+    ["Building.*[.]BLD_R.*", 4],
+    ["BP.Roof.*", 4],
+    [".*Rooftop_Entrance.*", 5],
+    [".*RooftopGlass.*", 6],
+    [".*SM_Tube_Vent.*", 7],
+    [".*RooftopVentilator.*", 7],
+    [".*BigCooler.*", 8],
+    [".*RooftopCooler.*", 8],
+    [".*prp_ac.*", 8],
+    [".*AirConditioner.*", 8],
+    [".*BP_Custom_table.*", 9],
+    [".*prp_chair.*", 9],
+    [".*prp_bench.*", 9],
+    [".*prp_table.*", 9],
+    [".*prp.*Umbrella.*", 9],
+    [".*BP_airducts.*", 10],
+    [".*SM_WaterTank.*", 11],
+    [".*BP_HugeWaterTank.*", 11],
+    [".*BP_Chimney.*", 12],
+    [".*BP_prp_tarp.*", 13],
+    [".*Foliage.*", 14],
+    [".*flg_.*", 14],
+    [".*PowerLine.*", 15],
+    [".*prp_streetLight.*", 16],
+    [".*prp_trafficLight.*", 16],
+    [".*Door.*", 17]
+  ],
+  "collectors": [
+    {
+      "type": "Scene"
+    },
+    {
+      "type": "Segmentation",
+      "compress": false,
+      "retain_data": true
+    },
+    {
+      "type": "Lidar",
+      "lidar_name": "0",
+      "segmented": true,
+      "retain_data": false
+    }
+  ],
+  "collection_points": "assets/collectionpoints/collection_points_lidar_landing.npy",
+  "collection_point_names": "assets/collectionpoints/collection_points_lidar_landing.json",
+  "color_codes": "assets/data/segmentation_colors.txt",
+  "min_elapsed_time": 0.25,
+  "collections_per_point": 2,
+  "start_offset_unreal": [1490, -1120, 2590]
+}

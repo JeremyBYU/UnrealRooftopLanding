@@ -101,12 +101,12 @@ def main(save_data_dir:Path, geoson_map, results_fname, gui=True, segmented=Fals
     for record in records['records']:
         path_key = f"{record['uid']}-{record['sub_uid']}-0"
         bulding_label = record['label']  # building name
-        if record['uid'] in [25, 26, 27, 28, 29]:
+        if record['uid'] in [5, 6, 25, 26, 27, 28, 29]:
             logger.warn("Skipping record; UID: %s; SUB-UID: %s; Building Name: %s. Rooftop assets don't match map. Rooftop assets randomness wasn't fixed on this asset!",
                         record['uid'], record['sub_uid'], bulding_label)
             continue
         # uid #45 is best segmentation example
-        # if record['uid'] < 10:
+        # if record['uid'] < 8:
         #     continue
 
         logger.info("Inspecting record; UID: %s; SUB-UID: %s; Building Name: %s",

@@ -15,7 +15,7 @@ polylidar: # Parameters we send to polylidar. Determine plane and polygon extrac
   norm_thresh: 0.90 # Not used, set to the same as norm_thresh_min. Will deprecate later.
   norm_thresh_min: 0.96 # triangles must have a minimum amount of planarity.
   min_hole_vertices : 4 # minimum number of vertices in a hole to return
-  min_triangles: 100 # minimum number of triangles needed to make a plane
+  min_triangles: 500 # minimum number of triangles needed to make a plane
 fastga: # Parameters used for dominant plane normal estimation
   level: 5 # refinement level of the gaussian accumulator
   down_sample_fraction: 0.50 # only use X% of triangle normals from mesh for integration, lower the faster

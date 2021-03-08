@@ -125,11 +125,19 @@ def extract_all_dominant_plane_normals(tri_mesh, level=5, with_o3d=False, ga_=No
     ga.clear_count()
     return avg_peaks, pcd_all_peaks, arrow_avg_peaks, colored_icosahedron, timings
 
+def prefilter(points, polygons):
+    z_values = [ points[polygon.shell[0], 2] for polygon in  polygons]
+    idx = np.argmin(z_values)
+    best_polygon = polygons[idx]
+    # print(z_values, idx)
+    return [best_polygon]
 
 def filter_and_create_polygons(points, polygons, rm=None, line_radius=0.005,
                                postprocess=dict(filter=dict(hole_area=dict(min=0.025, max=100.0), hole_vertices=dict(min=6), plane_area=dict(min=0.05)),
-                                                positive_buffer=0.00, negative_buffer=0.00, simplify=0.0)):
+                                                positive_buffer=0.00, negative_buffer=0.00, simplify=0.0), segmented=False):
     " Apply polygon filtering algorithm, return Open3D Mesh Lines "
+    # if segmented:
+    #     polygons = prefilter(points, polygons)
     t1 = time.perf_counter()
     # planes, obstacles = filter_planes(polygons, points, postprocess, rm=rm)
     planes = filter_planes(polygons, points, postprocess, rm=rm)
@@ -177,7 +185,7 @@ def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
             # print(polygons_for_normal)
             if len(polygons_for_normal) > 0:
                 planes_shapely, filter_time = filter_and_create_polygons(
-                    vertices, polygons_for_normal, rm=rm, postprocess=postprocess)
+                    vertices, polygons_for_normal, rm=rm, postprocess=postprocess, segmented=False)
                 all_planes_shapely.extend(planes_shapely)
                 # all_obstacles_shapely.extend(obstacles_shapely)
                 time_filter.append(filter_time)
@@ -222,9 +230,12 @@ def extract_planes_and_polygons_from_classified_mesh(tri_mesh, avg_peaks,
             rm, _ = R.align_vectors([[0, 0, 1]], [avg_peak])
             polygons_for_normal = all_polygons[i]
             all_triangle_sets = all_planes[i]
+            # tri_normals = np.array(tri_mesh.triangle_normals)
+            # print(len(polygons_for_normal))
+            # import ipdb; ipdb.set_trace()
             if len(polygons_for_normal) > 0:
                 planes_shapely, filter_time = filter_and_create_polygons(
-                    vertices, polygons_for_normal, rm=rm, postprocess=postprocess)
+                    vertices, polygons_for_normal, rm=rm, postprocess=postprocess, segmented=segmented)
                 all_planes_shapely.extend(planes_shapely)
                 time_filter.append(filter_time)
 

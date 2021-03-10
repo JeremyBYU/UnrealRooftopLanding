@@ -13,6 +13,7 @@ from polylidar import MatrixDouble, Polylidar3D, MatrixUInt8
 from fastga import GaussianAccumulatorS2, MatX3d, IcoCharts
 from fastga.peak_and_cluster import find_peaks_from_ico_charts
 from fastga.o3d_util import get_arrow, get_pc_all_peaks, get_arrow_normals
+from shapely.geometry import polygon
 
 
 from airsimcollect.helper.helper_logging import logger
@@ -125,19 +126,30 @@ def extract_all_dominant_plane_normals(tri_mesh, level=5, with_o3d=False, ga_=No
     ga.clear_count()
     return avg_peaks, pcd_all_peaks, arrow_avg_peaks, colored_icosahedron, timings
 
-def prefilter(points, polygons):
-    z_values = [ points[polygon.shell[0], 2] for polygon in  polygons]
-    idx = np.argmin(z_values)
-    best_polygon = polygons[idx]
-    # print(z_values, idx)
-    return [best_polygon]
+def prefilter_polys(points, polygons, avg_peak=np.array([0, 0, -1]), drone_pose=np.array([0.0, 0.0, 0.0]), filter_dist=15):
+    polygon_points = [ points[polygon.shell[0], :3] for polygon in  polygons]
+    polygon_dists = [ np.abs(np.dot(avg_peak, p_point - drone_pose))  for p_point in polygon_points]
+    filtered_list = []
+    for i in range(len(polygons)):
+        dist = polygon_dists[i]
+        if dist < filter_dist:
+            filtered_list.append(polygons[i])
+    
+    if len(filtered_list) > 0:
+        return filtered_list
+    else:
+        return polygons
+    # best_polygon = polygons[idx]
+    # # print(z_values, idx)
+    # return [best_polygon]
 
 def filter_and_create_polygons(points, polygons, rm=None, line_radius=0.005,
                                postprocess=dict(filter=dict(hole_area=dict(min=0.025, max=100.0), hole_vertices=dict(min=6), plane_area=dict(min=0.05)),
-                                                positive_buffer=0.00, negative_buffer=0.00, simplify=0.0), segmented=False):
+                                                positive_buffer=0.00, negative_buffer=0.00, simplify=0.0), prefilter=False, avg_peak=np.array([0, 0, -1]),
+                                                drone_pose=np.array([0.0, 0.0, 0.0])):
     " Apply polygon filtering algorithm, return Open3D Mesh Lines "
-    # if segmented:
-    #     polygons = prefilter(points, polygons)
+    if prefilter:
+        polygons = prefilter_polys(points, polygons, avg_peak, drone_pose=drone_pose)
     t1 = time.perf_counter()
     # planes, obstacles = filter_planes(polygons, points, postprocess, rm=rm)
     planes = filter_planes(polygons, points, postprocess, rm=rm)
@@ -235,7 +247,7 @@ def extract_planes_and_polygons_from_classified_mesh(tri_mesh, avg_peaks,
             # import ipdb; ipdb.set_trace()
             if len(polygons_for_normal) > 0:
                 planes_shapely, filter_time = filter_and_create_polygons(
-                    vertices, polygons_for_normal, rm=rm, postprocess=postprocess, segmented=segmented)
+                    vertices, polygons_for_normal, rm=rm, postprocess=postprocess, avg_peak=avg_peak, **kwargs)
                 all_planes_shapely.extend(planes_shapely)
                 time_filter.append(filter_time)
 
@@ -247,7 +259,7 @@ def extract_planes_and_polygons_from_classified_mesh(tri_mesh, avg_peaks,
 
 def extract_polygons(points_all, all_polys, pl, ga, ico, config,
                      lidar_beams=64, segmented=True, roof_class=4,
-                     dynamic_decimation=True):
+                     dynamic_decimation=True, **kwargs):
     points = points_all[:, :3]
     num_cols = int(points.shape[0] / lidar_beams)
     opc = points.reshape((lidar_beams, num_cols, 3))
@@ -291,7 +303,7 @@ def extract_polygons(points_all, all_polys, pl, ga, ico, config,
     # 3. Extract Planes and Polygons
     planes, triangle_sets, timings = extract_planes_and_polygons_from_classified_mesh(tri_mesh, avg_peaks, pl_=pl,
                                                                                       filter_polygons=True, segmented=segmented,
-                                                                                      postprocess=config['polygon']['postprocess'])
+                                                                                      postprocess=config['polygon']['postprocess'], **kwargs)
     alg_timings.update(timings)
     # 100 ms to plot.... wish we had opengl line-width control
     if all_polys is not None:

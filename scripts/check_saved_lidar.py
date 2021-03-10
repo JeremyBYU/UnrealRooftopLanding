@@ -23,7 +23,7 @@ from airsimcollect.helper.o3d_util import (update_linemesh, handle_linemeshes, i
                                            update_frustum, load_view_point, save_view_point, toggle_visibility, BLUE, PURPLE)
 from airsimcollect.helper.helper_transforms import classify_points, polygon_to_pixel_coords
 from airsimcollect.helper.helper_metrics import (update_projected_image, BLUE_NORM, GOLD_NORM, PURPLE_NORM,
-    load_map, select_building, load_map, load_records, compute_metric, update_state, get_inscribed_circle_polygon)
+                                                 load_map, select_building, load_map, load_records, compute_metric, update_state, get_inscribed_circle_polygon)
 from airsimcollect.helper.helper_polylidar import extract_polygons
 
 from fastga import GaussianAccumulatorS2Beta, IcoCharts
@@ -39,14 +39,15 @@ FOV = 90
 
 # Nice Pictures UIDs - 31, 34, 38, 39, 42, 45
 # Bad Segmentation Drone but still success - 40, 41,
-       
-def main(save_data_dir:Path, geoson_map, results_fname, gui=True, segmented=False, computer='desktop', save_images=True):
+
+
+def main(save_data_dir: Path, geoson_map, results_fname, gui=True, segmented=False, computer='desktop', save_images=True):
     records, lidar_paths_dict, scene_paths_dict, segmentation_paths_dict, seg_infer_path_dict, seg_infer_dict = load_records(
         save_data_dir)
 
     output_dir = (save_data_dir / "Output")
     output_dir.mkdir(parents=False, exist_ok=True)
-        
+
     # Load yaml file
     with open('./assets/config/PolylidarParams.yaml') as file:
         config = yaml.safe_load(file)
@@ -144,20 +145,22 @@ def main(save_data_dir:Path, geoson_map, results_fname, gui=True, segmented=Fals
 
         # Points that define the camera FOV frustum
         frustum_points = create_frustum(
-                distance_to_camera, camera_position, hfov=FOV, vfov=FOV)
+            distance_to_camera, camera_position, hfov=FOV, vfov=FOV)
 
         # Polygon Extraction of surface
         # Only Polylidar3D
         pl_planes, alg_timings, _, _, _ = extract_polygons(pc_np, geometry_set['pl_polys'] if not segmented else None, pl, ga,
-                                                           ico, config, segmented=False, lidar_beams=lidar_beams)
+                                                           ico, config, segmented=False, lidar_beams=lidar_beams, drone_pose=camera_position)
 
         # Polylidar3D with Perfect (GT) Segmentation
         pl_planes_seg_gt, alg_timings_seg, _, _, _ = extract_polygons(pc_np, geometry_set['pl_polys'] if segmented else None, pl, ga,
-                                                                      ico, config, segmented=True, lidar_beams=lidar_beams)
+                                                                      ico, config, segmented=True, lidar_beams=lidar_beams, drone_pose=camera_position,
+                                                                      prefilter=True)
 
         # Polylidar3D with Inferred (NN) Segmentation
         pl_planes_seg_infer, alg_timings_seg, _, _, _ = extract_polygons(pc_np_infer, geometry_set['pl_polys'] if segmented else None, pl, ga,
-                                                                         ico, config, segmented=True, lidar_beams=lidar_beams)
+                                                                         ico, config, segmented=True, lidar_beams=lidar_beams, drone_pose=camera_position, 
+                                                                         prefilter=True)
         alg_timings_seg.update(t_classify_pointcloud=t_classify_pointcloud)
         if pl_planes and True:
             base_iou, pl_poly_baseline, gt_poly = compute_metric(
@@ -171,7 +174,8 @@ def main(save_data_dir:Path, geoson_map, results_fname, gui=True, segmented=Fals
 
             # Get Largest Inscribed Circle
             circle_poly, circle = get_inscribed_circle_polygon(pl_poly_estimate_seg, config['polylabel']['precision'])
-            circle_poly_baseline, circle_baseline = get_inscribed_circle_polygon(pl_poly_baseline, config['polylabel']['precision'])
+            circle_poly_baseline, circle_baseline = get_inscribed_circle_polygon(
+                pl_poly_baseline, config['polylabel']['precision'])
             alg_timings_seg.update(t_polylabel=circle['t_polylabel'])
 
             result_records.append(dict(uid=record['uid'], sub_uid=record['sub_uid'],
@@ -180,11 +184,12 @@ def main(save_data_dir:Path, geoson_map, results_fname, gui=True, segmented=Fals
                                        computer=computer,
                                        **alg_timings_seg))
 
-
             img_projected_baseline = np.copy(img_projected)
             # img_projected[pixels[:,1], pixels[:, 0]] = [0, 255,0]
-            update_projected_image(img_projected, circle_poly, pl_poly_estimate_seg, gt_poly, pixels, img_meta, airsim_settings)
-            update_projected_image(img_projected_baseline, circle_poly_baseline, pl_poly_baseline, gt_poly, pixels, img_meta, airsim_settings)
+            update_projected_image(img_projected, circle_poly, pl_poly_estimate_seg,
+                                   gt_poly, pixels, img_meta, airsim_settings)
+            update_projected_image(img_projected_baseline, circle_poly_baseline,
+                                   pl_poly_baseline, gt_poly, pixels, img_meta, airsim_settings)
             # Visualize these intersections
             if gui:
                 # Visualize the polylidar with segmentation results
@@ -203,7 +208,6 @@ def main(save_data_dir:Path, geoson_map, results_fname, gui=True, segmented=Fals
             semantic_fname = output_dir / "{}-projected-semantic.png".format(path_key)
             cv2.imwrite(str(baseline_fname), img_projected_baseline)
             cv2.imwrite(str(semantic_fname), img_projected)
-
 
         if gui:
             # Create Frustum
@@ -232,8 +236,6 @@ def main(save_data_dir:Path, geoson_map, results_fname, gui=True, segmented=Fals
     df['iou_diff'] = df['pl_base_iou'] - df['pl_seg_gt_iou']
     df.to_csv(RESULTS_DIR / results_fname)
     print(df.mean())
-
-
 
 
 def parse_args():

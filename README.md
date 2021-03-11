@@ -1,6 +1,6 @@
 # Unreal Rooftop Landing
 
-This is the master repository to hold source code and analysis of Rooftop Landing in the Unreal Engine. This repository discusses the use of fusing Polylidar3D and Deep Learning to identify flat surfaces from 3D Point Clouds (called Semantic Polylidar3D).
+This is the master repository to hold source code and analysis of Rooftop Landing in the Unreal Engine. This repository discusses the use of fusing Polylidar3D and Deep Learning to identify flat surfaces from 3D Point Clouds (called **Semantic Polylidar3D**). The Polylidar3D repository has already been updated to include semantic information and can be found [here](https://github.com/JeremyBYU/polylidar).
 
 ## Install
 

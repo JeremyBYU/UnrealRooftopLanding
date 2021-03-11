@@ -197,7 +197,7 @@ def extract_planes_and_polygons_from_mesh(tri_mesh, avg_peaks,
             # print(polygons_for_normal)
             if len(polygons_for_normal) > 0:
                 planes_shapely, filter_time = filter_and_create_polygons(
-                    vertices, polygons_for_normal, rm=rm, postprocess=postprocess, segmented=False)
+                    vertices, polygons_for_normal, rm=rm, postprocess=postprocess)
                 all_planes_shapely.extend(planes_shapely)
                 # all_obstacles_shapely.extend(obstacles_shapely)
                 time_filter.append(filter_time)

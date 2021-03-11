@@ -1,11 +1,11 @@
 # Unreal Rooftop Landing
 
-This is the master repository to hold source code and analysis of Rooftop Landing in the Unreal Engine. This repository discusses the use of fusing Polylidar3D and Deep Learning to identify flat surfaces from 3D Point Clouds.
+This is the master repository to hold source code and analysis of Rooftop Landing in the Unreal Engine. This repository discusses the use of fusing Polylidar3D and Deep Learning to identify flat surfaces from 3D Point Clouds (called Semantic Polylidar3D).
 
 ## Install
 
 1. Install [conda](https://conda.io/projects/conda/en/latest/) or create a python virtual environment ([Why?](https://medium.freecodecamp.org/why-you-need-python-environments-and-how-to-manage-them-with-conda-85f155f4353c)). I recommend conda for Windows users.
-2. Example - `conda create --name unreal python=3.7 && conda activate unreal` 
+2. Example - `conda create --name unreal python=3.6 && conda activate unreal` 
 2. `pip install -e .`
 
 
@@ -28,7 +28,7 @@ Below is the workflow to generate training and testing data from the unreal envi
 
 ### Generate Collection Points
 
-First we need to generate "Collection Points" for where the drone will be. To read up on collection points please see `airsimcollect/README.md`.
+First we need to generate "Collection Points" for where the drone will be. To read up on collection points please see `airsimcollect/README.md`. These are the points (xyz,roll,pitch,yaw) for which data is collected in AirSim.
 
 
 #### Computer Vision Training Collection Points
@@ -56,9 +56,9 @@ We are also adding these new ones as well. These are sampled as a circle overhea
 
 This generated collection points for Rooftop LIDAR collection. Much smaller collection. Used for testing actual landing site selection. 
 
-1. `poi generate -m assets/maps/poi-roof-lidar-modified.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -ri 1000 -pr 75 75 -pd 0 -yd 90 -rfn class_label`
+<!-- 1. `poi generate -m assets/maps/poi-roof-lidar-modified.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -ri 1000 -pr 75 75 -pd 0 -yd 90 -rfn class_label` -->
 
-Proposed- `poi generate -m assets/maps/poi-roof-lidar-modified.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -ri -500 -sc circle -yd 90 -pr 0 0 -rfn class_label`
+1. `poi generate -m assets/maps/poi-roof-lidar-modified.geojson -o assets/collectionpoints/collection_points_lidar_landing.npy -ho 1000 -ri -500 -sc circle -yd 90 -pr 0 0 -rfn class_label`
 
 ### Generate Images from AirSim
 
@@ -67,40 +67,70 @@ Next we will launch AirSim in Computer Vision mode and collect scene (rgb) and s
 1. `asc collect -c assets/config/collect_cv_train.json`
 2. `asc collect -c assets/config/collect_cv_test.json`
 
+
+Note that you have to do this for each random world that has been generated.  The workflow is to launch the random world in UE4, then run the collection. After collection is finished shutdown the UE4 world. Now modify the JSON file to "save_dir" to match the name of the next random world.
+
 ### Generate Images and LiDAR data from AirSim for Testing
 
 Next we will launch AirSim in `Multirotor` mode. This time we will generate images and LiDAR point clouds from the collection points mentioned previously. Data is saved inside the folder `AirSimCollectData`. Be sure to update your AirSim settings in your home directory to use the multirotor.
 
 1. `asc collect -c assets/config/collect_lidar_landing.json`
 
-Notes - Sometimes the camera takes time to update position, add more time delay than 0.5 seconds. In other words the lidar and vehicle move to a new position but the camera is still in the old position (AirSim bug).
+<!-- Notes - Sometimes the camera takes time to update position, add more time delay than 0.5 seconds. In other words the lidar and vehicle move to a new position but the camera is still in the old position (AirSim bug). -->
 
-### Decision Point Analysis
+
+## Making Sure You are Ready
+
+Several scripts have been added into the `scripts/test` folder. These scripts serve as small isolated components to make sure that everything is setup and working for the data gathering and analysis. A test environments (no rooftops, allowed to be shared) were created for this: `LiDARTest`. This level can be downloaded [here](https://drive.google.com/file/d/1UdfcBkOJIA2WSiWwvUXy9Zx65pt3XhJV/view?usp=sharing).
+
+1. `check_segmentation` - Launch the UE4 world and then launch this script. You should see it change all the segmentation codes.
+2. `check_lidar` -  Launch the UE4 world and then launch this script. This ensures that we can receive LiDAR from AirSim.
+3. `check_transforms` - Launch the UE4 world and then launch this script. This ensures that we can project LIDAR into the image frame correctly.
+4. `check_lidar_smoothing` - Launch the UE4 world and then launch this script. This ensures that the LIDAR/mesh smoothing procedures are working.
+5. `check_polygon` - Launch the UE4 world and then launch this script. This ensures that Polygon extraction is working.
+6. `check_polygon_segmentation` - (SKIP) Launch the UE4 world and then launch this script. This ensures that Semantic Polylidar3D extraction is working. This only works in an UE4 environment that can not be distributed so you will need to skip this one.
+
+## Calculate Semantic Polylidar3D Accuracy, Execution Time, and Visualize 
+
+This is a great little script that will load and visualize the data that was already collected. You just need to point it to the saved data folder. It launches an Open3D window that visualizes pont clouds, polygons, and even buildings.  It also launches an image viewer that shows the camera image, ground truth segmentation, predicted segmentation, and projected polygons.
 
 1. `python -m scripts.check_saved_lidar --gui --seg --data AirSimCollectData/LidarDecisionPoint --map assets/maps/roof-lidar-decision-point.geojson`
+
+
+Data will be saved in the folder `results` and a notebook does further analysis: `notebooks/AlgorithmAnalysis.ipynb`
+
+![Open3D](./assets/imgs/o3d_example.png "Open3D")
+![Open3D](./assets/imgs/opencv_example.png "Open3D")
+
+
+## Decision Point Analysis
+
+This will gather data to perform a decision point analysis. An environment must be loaded where a human is on the rooftop. The script will then gather data over the human at a variety of height levels. Environment can not be distributed, but source code is here.
+
+1. `python -m collect_decision_pont_data`
+
+After gathering the data an analysis can be performed by calling 
+
+1. `python -m check_decision_point`
+
+Data will be saved and a notebook does further analysis: `notebooks/DecisionPointAnalysis.ipynb`
+
+
+## Manhattan Rooftop Data
+
+All Manhattan rooftop data can be found here: `assets/data/manhattan`. An analysis of all this data can be found in this notebook: `notebooks/RooftopAnalysis-3.ipynb`.
 
 ## Extra Notes
 
 * The unreal engine has its own coordinate frame and origin. I call this the Unreal Coordinate Frame (UCF). Z is "up" in the frame.
-* AirSim uses its own NED coordinate frame. The origin is the starting position of the drone before takeoff (controlled by me in a JSON file). The Z axis is flipped in UCF, everything else is the same wth UCF.
+* AirSim uses its own NED coordinate frame. The origin is the starting position of the drone before takeoff (specify this in your collection JSON file). The Z axis is flipped in UCF, everything else is the same wth UCF.
 * The position of the UAV body frame and the camera are the same. However the camera is rotated 90 degrees down.
 * The position of the LiDAR is 10 cm further on the x-axis in the body frame of the drone.
 * AirSimCollect will collect all points from the lidar, camera, and ground truth segmentation. The position/orientation of these sensors are recorded as well (NED) frame.
 
-
-## Gather Data Script
-
-`python assets/rooftop/scripts/gatherstats.py -c assets/rooftop/scripts/config_gather_stats.json`
-
-`python assets/rooftop/scripts/gatherstats.py -c assets/rooftop/scripts/config_gather_stats_tx2.json`
-
-* UID 72 is a great example of a failure
-  * Aircraft is too far away, point cloud does not pick up on air vents
  
 
-
-
-## Scratch
+<!-- ## Scratch
 
 ### TODO
 
@@ -205,4 +235,4 @@ Notes - Sometimes the camera takes time to update position, add more time delay 
   ```
 
 
-
+ -->

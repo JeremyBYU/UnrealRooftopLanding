@@ -20,7 +20,7 @@ from fastga import GaussianAccumulatorS2Beta, IcoCharts
 from polylidar import Polylidar3D
 from polylidar.polylidarutil import (set_axes_equal, plot_planes_3d, scale_points)
 
-from airsimcollect.helper.helper_metrics import (load_records, update_state)
+from airsimcollect.helper.helper_metrics import (load_records, update_state, get_inscribed_circle_polygon)
 
 from airsimcollect.helper.helper_transforms import seg2rgb
 
@@ -220,9 +220,11 @@ def main():
     fig.savefig("assets/imgs/Algorithm_mesh.pdf", bbox_inches='tight')
     plt.show()
 
+    circle_poly, circle = get_inscribed_circle_polygon(pl_planes[0][0], 0.1)
     print("Should see polygon")
     fig, ax = plt.subplots(figsize=(3, 4), nrows=1, ncols=1)
     plot_polygons(pl_planes, ax, flip_xy=True)
+    plot_polygons([(circle_poly, None)], ax, flip_xy=True, shell_color='blue')
     ax.scatter(pc_np[:, 1], pc_np[:, 2], alpha=0.0)
     ax.axis('equal')
     ax.invert_yaxis()

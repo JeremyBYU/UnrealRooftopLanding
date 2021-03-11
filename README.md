@@ -98,8 +98,8 @@ This is a great little script that will load and visualize the data that was alr
 
 Data will be saved in the folder `results` and a notebook does further analysis: `notebooks/AlgorithmAnalysis.ipynb`
 
-![Open3D](./assets/imgs/o3d_example.png "Open3D")
-![Open3D](./assets/imgs/opencv_example.png "Open3D")
+![Open3D](/assets/imgs/o3d_example.png "Open3D")
+![Open3D](/assets/imgs/opencv_example.png "Open3D")
 
 
 ## Decision Point Analysis

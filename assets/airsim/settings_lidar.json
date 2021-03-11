@@ -31,45 +31,72 @@
         "0": {
           "SensorType": 6,
           "Enabled": true,
-          "NumberOfChannels": 16,
-          "RotationsPerSecond": 10,
-          "PointsPerSecond": 100000,
-          "X": 0.46,
-          "Y": 0,
-          "Z": 0,
+          "ForceFullScan": true,
+          "ForceOrganized": true,
+          "RangeNoise": 0.05,
+          "HorizontalNoise": 0.1,
+          "NumberOfChannels": 64,
+          "RotationsPerSecond": 20,
+          "PointsPerSecond": 655360,
+          "X": 0.1,
+          "Y": 0.0,
+          "Z": 0.0,
           "Roll": 0,
-          "Pitch": 0,
+          "Pitch": -90,
           "Yaw": 0,
-          "VerticalFOVUpper": -5,
+          "VerticalFOVUpper": 45,
           "VerticalFOVLower": -45,
-          "HorizontalFOVStart": -30,
-          "HorizontalFOVEnd": 30,
+          "HorizontalFOVStart": -45,
+          "HorizontalFOVEnd": 45,
           "DrawDebugPoints": false,
           "DataFrame": "VehicleInertialFrame"
         }
+      },
+      "Cameras": {
+        "0": {
+          "CaptureSettings": [
+            {
+              "ImageType": 0,
+              "Width": 512,
+              "Height": 512
+            },
+            {
+              "ImageType": 5,
+              "Width": 512,
+              "Height": 512
+            }
+          ],
+          "X": 0.0,
+          "Y": 0.0,
+          "Z": 0.0,
+          "Pitch": -90,
+          "Roll": 0,
+          "Yaw": 0
+        }
       }
     }
-  },
-  "CameraDefaults": {
-    "CaptureSettings": [
-      {
-        "ImageType": 0,
-        "Width": 512,
-        "Height": 512
-      },
-      {
-        "ImageType": 5,
-        "Width": 512,
-        "Height": 512
-      }
-    ]
   },
   "SegmentationSettings": {
     "MeshNamingMethod": "OwnerName"
   },
   "SubWindows": [
-    { "WindowID": 0, "CameraName": "0", "ImageType": 3, "Visible": false },
-    { "WindowID": 1, "CameraName": "0", "ImageType": 5, "Visible": false },
-    { "WindowID": 2, "CameraName": "0", "ImageType": 0, "Visible": true }
+    {
+      "WindowID": 0,
+      "CameraName": "0",
+      "ImageType": 3,
+      "Visible": false
+    },
+    {
+      "WindowID": 1,
+      "CameraName": "0",
+      "ImageType": 5,
+      "Visible": true
+    },
+    {
+      "WindowID": 2,
+      "CameraName": "0",
+      "ImageType": 0,
+      "Visible": true
+    }
   ]
 }

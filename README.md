@@ -23,8 +23,7 @@ Note that items (1,2,4) are installed/used inside of the Unreal Project/Editor i
 
 ## Workflow
 
-Below is the workflow to generate training and testing data from the unreal environment.
-
+Below is the workflow to generate training and testing data from the unreal environment. Copies of the AirSim Settings can be found in `assets/airsim`.
 
 ### Generate Collection Points
 

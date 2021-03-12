@@ -181,20 +181,6 @@ def main():
     elev = 33#40
     azim = 4#48
     colors = colors_mapping(pc_np[:, 3].astype(np.int))[:, :3]
-
-    # # Show Point Cloud
-    # print("Should see point raw point cloud")
-    # fig, ax = plt.subplots(figsize=(10, 10), nrows=1, ncols=1,
-    #                        subplot_kw=dict(projection='3d'))
-    # # plot points
-    # ax.scatter(*scale_points(pc_np[:, :3]), s=40.0, c=colors,  edgecolor="k")
-    # set_axes_equal(ax)
-    # ax.view_init(elev=elev, azim=azim)
-    # ax.dist = 8
-    # fig.savefig("assets/imgs/Algorithm_pointcloud.pdf", bbox_inches='tight')
-    # fig.savefig("assets/imgs/Algorithm_pointcloud.png", bbox_inches='tight', pad_inches=-0.8)
-    # plt.show()
-
     # Show Triangulation
     print("Should see triangulation point cloud")
     fig, ax = plt.subplots(figsize=(5, 5), nrows=1, ncols=1,
@@ -232,45 +218,6 @@ def main():
     ax.set_ylabel('Y (m)', labelpad=-5)
     fig.savefig("assets/imgs/Algorithm_polygon.pdf", bbox_inches='tight')
     plt.show()
-
-    # # Show Triangulation
-    # print("Should see Mesh and Polygons")
-    # fig, ax = plt.subplots(figsize=(10, 10), nrows=1, ncols=1,
-    #                        subplot_kw=dict(projection='3d'))
-
-    # plot_planes_3d(pc_np, triangles, all_planes, ax, alpha=0.1, edgecolor=(0, 0, 0, 0.7), linewidth=1.0) # black mesh
-    # plot_planes_3d(pc_np, triangles, triangle_sets, ax, alpha=0.5, edgecolor=(0, 0, 0, 0.7), linewidth=1.0) # extracted segmetns
-    # ax.scatter(*scale_points(pc_np[:, :3]), s=40.0, c=colors, edgecolor="k", alpha=1.0) # points
-    # set_axes_equal(ax, ignore_z=False)
-    # ax.set_xlabel('X (m)')
-    # ax.set_ylabel('Y (m)')
-    # ax.set_zlabel('Z (m)')
-    # ax.view_init(elev=elev, azim=azim)
-
-    # plot_polygons_3d(pl_planes, ax)
-    # # ax.dist = 8
-
-    # ax.add_collection3d(mplot3d.art3d.Poly3DCollection(drone_mesh.vectors)) #  edgecolors='k', linewidths=0.05
-    # fig.savefig("assets/imgs/Algorithm_mesh.pdf", bbox_inches='tight')
-    # plt.show()
-
-    # plot_planes_3d(pc_np, triangles, all_planes, ax, alpha=0.5)
-
-    # print("")
-    # print("Should see two planes extracted, please rotate.")
-    # fig, ax = plt.subplots(figsize=(10, 10), nrows=1, ncols=1,
-    #                        subplot_kw=dict(projection='3d'))
-    # # plot all triangles
-    # plot_polygons_3d(points, polygons, ax)
-    # plot_planes_3d(points, triangles, planes, ax)
-    # # plot points
-    # ax.scatter(*scale_points(points), c='k', s=0.1)
-    # set_axes_equal(ax)
-    # ax.view_init(elev=elev, azim=azim)
-    # fig.savefig("assets/scratch/Basic25DAlgorithm_polygons.pdf", bbox_inches='tight')
-    # fig.savefig("assets/scratch/Basic25DAlgorithm_polygons.png", bbox_inches='tight', pad_inches=-0.8)
-    # plt.show()
-    # print("")
 
 
 if __name__ == "__main__":

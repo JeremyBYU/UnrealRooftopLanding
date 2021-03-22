@@ -13,6 +13,7 @@ from mpl_toolkits import mplot3d
 from stl import mesh
 from shapely.geometry import Polygon
 from descartes import PolygonPatch
+import seaborn as sns
 
 from airsimcollect.helper.helper_polylidar import extract_polygons
 
@@ -23,6 +24,8 @@ from polylidar.polylidarutil import (set_axes_equal, plot_planes_3d, scale_point
 from airsimcollect.helper.helper_metrics import (load_records, update_state, get_inscribed_circle_polygon)
 
 from airsimcollect.helper.helper_transforms import seg2rgb
+
+
 
 
 def categorical_cmap(nc, nsc, cmap="tab10", continuous=False):
@@ -48,8 +51,15 @@ def categorical_cmap(nc, nsc, cmap="tab10", continuous=False):
 colors_mapping = categorical_cmap(8, 1, cmap='Dark2')
 
 
-def filter_points(pc, camera_position, max_height=12):
+sns_colorblind = sns.color_palette("colorblind")
+sns_colorblind_ = [sns_colorblind[0], sns_colorblind[1], sns_colorblind[2]]
+colorblind_cmap = matplotlib.colors.ListedColormap(sns_colorblind_)
+
+
+
+def filter_points(pc, camera_position, max_height=15):
     # Make point cloud centered on drone
+    pc[:, 1] = pc[:, 1] + 1.5
     pc[:, :3] = pc[:, :3] - camera_position
     pc[:, 2] = -pc[:, 2]
 
@@ -63,9 +73,24 @@ def filter_points(pc, camera_position, max_height=12):
 
     return pc
 
+def map_classes(pc_np):
+    remapped_classes = np.copy(pc_np[:, 3])
+    class_mask = remapped_classes ==  4
+    remapped_classes[class_mask] = 2
 
-def load_data(config, record_number=140, lidar_beams=64, vert_ds=2, hor_ds=2, start_x=0.05, end_x=0.8,
-              start_y=0.10, end_y=0.90):
+    class_mask = remapped_classes ==  5
+    remapped_classes[class_mask] = 1
+
+    class_mask = remapped_classes ==  6
+    remapped_classes[class_mask] = 1
+
+    class_mask = remapped_classes ==  255
+    remapped_classes[class_mask] = 0
+
+    return remapped_classes
+
+def load_data(config, record_number=140, lidar_beams=64, vert_ds=2, hor_ds=2, start_x=0.1, end_x=0.84,
+              start_y=0.00, end_y=1.00):
     base_path = Path("./AirSimCollectData/LidarRoofManualTestDuplicate")
     records, _, _, _, _, _ = load_records(base_path)
 
@@ -98,11 +123,15 @@ def load_data(config, record_number=140, lidar_beams=64, vert_ds=2, hor_ds=2, st
     new_points = int(opc.shape[0] * opc.shape[1])
     pc_np = opc.reshape((new_points, 4))
 
+    mask = np.isnan(pc_np[:, 0])
+    # print(np.unique(pc_np[~mask, 3])) # [  4.   5.   6. 255.]
+    remapped_classes = map_classes(pc_np)
+    # print(np.unique(pc_np[~mask, 3])) # [  4.   5.   6. 255.]
     # temp_x = np.copy(pc_np[:, 0])
     # pc_np[:, 0] = pc_np[:, 1]
     # pc_np[:, 1] = temp_x
 
-    return pc_np, camera_position, new_shape
+    return pc_np, camera_position, new_shape, remapped_classes
 
 
 def create_color_map():
@@ -151,7 +180,7 @@ def main():
             config = yaml.safe_load(file)
         except yaml.YAMLError as exc:
             print("Error parsing yaml")
-    config['polylidar']['lmax'] = 2.5
+    config['polylidar']['lmax'] = 3.5
     config['polylidar']['min_triangles'] = 100
     config['polygon']['postprocess']['positive_buffer'] = 0.0
     config['polygon']['postprocess']['negative_buffer'] = 0.0
@@ -165,7 +194,7 @@ def main():
     drone_mesh.vectors = drone_mesh.vectors * 0.05
     # import ipdb; ipdb.set_trace()
 
-    pc_np, camera_position, new_shape = load_data(config, record_number, lidar_beams, vert_ds, hor_ds)
+    pc_np, camera_position, new_shape, remapped_classes = load_data(config, record_number, lidar_beams, vert_ds, hor_ds)
     new_lidar_beams = new_shape[0]
 
     # Polygon Extraction of surface
@@ -180,7 +209,9 @@ def main():
     matplotlib.rc('font', **font)
     elev = 33#40
     azim = 4#48
-    colors = colors_mapping(pc_np[:, 3].astype(np.int))[:, :3]
+    colors = colors_mapping(remapped_classes.astype(np.int))[:, :3]
+    colors = colorblind_cmap(remapped_classes.astype(np.int))[:, :3]
+    colorblind_cmap
     # Show Triangulation
     print("Should see triangulation point cloud")
     fig, ax = plt.subplots(figsize=(5, 5), nrows=1, ncols=1,
@@ -199,8 +230,24 @@ def main():
     ax.set_zlim3d([-17, -3])
     plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0)
     # 
-    ax.view_init(elev=elev, azim=azim)
     # ax.dist = 8
+    start_height=-10.5
+    start_y = 3
+    pp = np.array([[0, start_y, start_height], 
+                    [0, start_y, start_height + 2]])
+    lii,=ax.plot(pp[:, 0], pp[:, 1], pp[:, 2] ,color='r',linewidth=2, zorder=100)
+
+    pp = np.array([[0, start_y, start_height + 2], 
+                    [0, -0.5 + start_y, start_height + 1.5]])
+    lii,=ax.plot(pp[:, 0], pp[:, 1], pp[:, 2] ,color='r',linewidth=2, zorder=100)
+
+    pp = np.array([[0, start_y, start_height + 2], 
+                    [0, 0.5 + start_y, start_height + 1.5]])
+    lii,=ax.plot(pp[:, 0], pp[:, 1], pp[:, 2] ,color='r',linewidth=2, zorder=100)
+    # blah = ax.quiver(-10.0, 0.0, -10, 0.0, 0.0, 1.0, length=3.0, normalize=True, colors='r', zorder=100, pivot='tail',)
+    # print(blah)
+    ax.view_init(elev=elev, azim=azim)
+
 
     ax.add_collection3d(mplot3d.art3d.Poly3DCollection(drone_mesh.vectors))  # edgecolors='k', linewidths=0.05
     fig.savefig("assets/imgs/Algorithm_mesh.pdf", bbox_inches='tight')

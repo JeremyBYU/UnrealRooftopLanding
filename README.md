@@ -13,10 +13,10 @@ This is the master repository to hold source code and analysis of Rooftop Landin
 
 There are several projects/plugins used to **make** the actual unreal engine world environments. 
 
-1. Custom Fork of AirSim (Unreal Plugin) with noisy LiDAR model and custom handling of semantic segmentation codes - `https://github.com/JeremyBYU/AirSim`
-2. Unreal Plugin to generate *classified* airborne points clouds of a level (map/world) - `https://github.com/JeremyBYU/PointCloudGeneratorUE4`
-3. Python scripts to analyze classified airborne point clouds of city rooftops and generate *vector* maps - `https://github.com/JeremyBYU/create-map`
-4. Unreal Python scripts to randomly generate and place assets on city rooftops (using vector maps) `https://github.com/JeremyBYU/UnrealLanding_UnrealProject`
+1. Custom Fork of AirSim (Unreal Plugin) with noisy LiDAR model and custom handling of semantic segmentation codes - [Link](https://github.com/JeremyBYU/AirSim)
+2. Unreal Plugin to generate *classified* airborne points clouds of a level (map/world) - [Link](https://github.com/JeremyBYU/PointCloudGeneratorUE4)
+3. Python scripts to analyze classified airborne point clouds of city rooftops and generate *vector* maps - [Link](https://github.com/JeremyBYU/create-map)
+4. Unreal Python scripts to randomly generate and place assets on city rooftops (using vector maps) [Link](https://github.com/JeremyBYU/UnrealLanding_UnrealProject)
 
 Note that items (1,2,4) are installed/used inside of the Unreal Project/Editor itself. The Unreal Project Files can be found [here](https://github.com/JeremyBYU/UnrealLanding_UnrealProject).
 
@@ -46,7 +46,7 @@ We are also adding these new ones as well. These are sampled as a circle overhea
 
 #### Computer Vision Testing Collection Points
 
-~2000 images for RandomWorldSeed3 and RandomManhattanDistribution each. Pitch range is offset by 5. Basically not only is the data different but it captured at different angles.  Probably overkill but still.
+Pitch range is offset by 5. Basically not only is the data different but it captured at different angles.  Probably overkill but still.
 
 1. `poi generate -m assets/maps/point_cloud_map.geojson -o assets/collectionpoints/collection_points_cv_test.npy -ri 500 -pr 35 80 -yd 45`
 

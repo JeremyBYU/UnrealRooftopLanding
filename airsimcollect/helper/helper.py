@@ -231,15 +231,17 @@ def set_axes_equal(ax):
 
     ax.set_box_aspect([1,1,1])
 
-def plot_collection_points(points, center, radius, feature=None, sampling_method='sphere'):
+def plot_collection_points(points, center, radius, feature=None, sampling_method='sphere', to_meters=False):
     fig, ax = plt.subplots(
         1, 1, subplot_kw={'projection': '3d'})
     # Plot points
-    uvw = center - points[:, :3]
+    div_by = 100.0 if to_meters else 1.0
+    uvw = (np.array(center)/div_by) - (points[:, :3] / div_by)
     if sampling_method == 'circle':
         uvw[-1, :] = uvw[0,:]
-    ax.quiver(points[:, 0], points[:, 1],
-              points[:, 2], *uvw.T, length=0.25)
+    points_ = points / div_by
+    ax.quiver(points_[:, 0], points_[:, 1],
+              points_[:, 2], *uvw.T, length=0.25)
 
     if feature is not None:
         if feature['geometry'].geom_type == 'LineString':
@@ -248,7 +250,8 @@ def plot_collection_points(points, center, radius, feature=None, sampling_method
             coords = np.column_stack([coords, heights])
         else:
             coords = np.array(feature['geometry'].exterior) # get exterior
-        ax.plot3D(coords[:, 0], coords[:,1], coords[:, 2], 'red')
+        coords_ = coords / div_by
+        ax.plot3D(coords_[:, 0], coords_[:,1], coords_[:, 2], 'green')
 
     # generate wire mesh for sphere
     if sampling_method == 'sphere':
@@ -257,15 +260,25 @@ def plot_collection_points(points, center, radius, feature=None, sampling_method
         x = np.outer(np.sin(theta), np.cos(phi)) * radius + center[0]
         y = np.outer(np.sin(theta), np.sin(phi)) * radius + center[1]
         z = np.outer(np.cos(theta), np.ones_like(phi)) * radius + center[2]
-        ax.plot_wireframe(x, y, z, color='k', rstride=1, cstride=1, linewidth=0.25)
+        x_ = x / div_by
+        y_ = y / div_by
+        z_ = z / div_by
+        ax.plot_wireframe(x_, y_, z_, color='k', rstride=1, cstride=1, linewidth=0.25)
     else:
-        p = Circle(center[:2], radius, ec='k', fill=False)
+        p = Circle(center[:2]/div_by, radius/div_by, ec='k', fill=False)
         ax.add_patch(p)
-        art3d.pathpatch_2d_to_3d(p, z=center[2], zdir="z")
-    ax.set_xlabel('X axis')
-    ax.set_ylabel('Y axis')
-    ax.set_zlabel('Z axis')
+        art3d.pathpatch_2d_to_3d(p, z=center[2]/div_by, zdir="z")
+    ax.set_xlabel('X (m)')
+    ax.set_ylabel('Y (m)')
+    ax.set_zlabel('Z (m)')
+
+    if to_meters:
+        for item in ([ax.title, ax.xaxis.label, ax.yaxis.label] +
+                    ax.get_xticklabels() + ax.get_yticklabels() + ax.get_zticklabels()):
+            item.set_fontsize(12)
     set_axes_equal(ax)
+    plt.subplots_adjust(left=0.0, right=1.0, top=1.0, bottom=0.0)
+    # fig.savefig('assets/images/SamplingSphere.pdf', bbox_inches='tight')
     plt.show()
 
 
